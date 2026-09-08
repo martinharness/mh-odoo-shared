@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_mrp_bom_form_amh_copy" model="ir.ui.view">
+        <field name="name">mrp.bom.form.amh.copy</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='components']//field[@name='bom_line_ids']" position="before">
+                <group name="amh_bom_copy" string="Copy From Another Item">
+                    <group>
+                        <field name="amh_copy_from_product_id"
+                               options="{'no_create': True, 'no_open': True}"
+                               placeholder="Item ID or name..."/>
+                        <field name="amh_copy_from_bom_id"
+                               options="{'no_create': True}"
+                               domain="[('id', '!=', id), ('product_tmpl_id', '=?', amh_copy_from_product_id), ('company_id', 'in', [company_id, False])]"
+                               invisible="not amh_copy_from_product_id"/>
+                    </group>
+                    <group>
+                        <field name="amh_copy_mode" widget="radio"
+                               invisible="not amh_copy_from_bom_id"/>
+                        <field name="amh_copy_operations"
+                               groups="mrp.group_mrp_routings"
+                               invisible="not amh_copy_from_bom_id"/>
+                        <field name="amh_copy_byproducts"
+                               groups="mrp.group_mrp_byproducts"
+                               invisible="not amh_copy_from_bom_id or type != 'normal'"/>
+                        <div colspan="2" class="mt-2" invisible="not amh_copy_from_bom_id">
+                            <button name="amh_action_copy_from_bom"
+                                    type="object"
+                                    string="Copy Components"
+                                    class="btn-primary"/>
+                        </div>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

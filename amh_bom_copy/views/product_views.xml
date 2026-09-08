@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_product_template_form_amh_copy_source" model="ir.ui.view">
+        <field name="name">product.template.form.amh.copy.source</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_only_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='default_code']" position="after">
+                <field name="amh_copy_source_id"
+                       readonly="1"
+                       force_save="1"
+                       invisible="not amh_copy_source_id"
+                       options="{'no_create': True}"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!--
+        The search view the "Copy which item?" picker uses, referenced from JS
+        via search_view_ref.  A primary inherit rather than a standalone view,
+        so every core filter and group-by is kept, along with
+        amh_product_exact_search's extension of the name field.
+
+        priority 99 on purpose: this must never win the race to become
+        product.template's default search view.  See the manifest.
+    -->
+    <record id="view_product_template_search_amh_copy" model="ir.ui.view">
+        <field name="name">product.template.search.amh.copy.source</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_search_view"/>
+        <field name="mode">primary</field>
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="before">
+                <field name="default_code"
+                       string="Internal Reference"
+                       filter_domain="['|', ('default_code', 'ilike', self), ('product_variant_ids.default_code', 'ilike', self)]"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
