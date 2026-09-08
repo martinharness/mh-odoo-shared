@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_batch_payment_form_wise_cad_balance" model="ir.ui.view">
+        <field name="name">account.batch.payment.form.wise.cad.balance</field>
+        <field name="model">account.batch.payment</field>
+        <field name="inherit_id" ref="l10n_us_direct_deposit.view_batch_payment_form_inherit"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="inside">
+                <field name="amh_wise_balance_funding_status" invisible="1"/>
+                <field name="amh_wise_balance_funded_at" invisible="1"/>
+                <div
+                    class="alert alert-success"
+                    role="alert"
+                    invisible="not amh_wise_balance_funding_status
+                               or amh_wise_balance_funding_status == 'not_funded'"
+                >
+                    <strong><field name="amh_wise_balance_funding_status"/></strong>
+                    <span invisible="not amh_wise_balance_funded_at">
+                        on <field name="amh_wise_balance_funded_at"/>
+                    </span>
+                </div>
+            </xpath>
+
+            <xpath expr="//button[@id='wise_validate_batch_button']" position="after">
+                <button
+                    id="amh_wise_initiate_and_fund_balance_button"
+                    name="action_open_wise_balance_funding_wizard"
+                    type="object"
+                    string="Initiate &amp; Fund from Wise Balance"
+                    class="btn-secondary"
+                    groups="account.group_account_user"
+                    invisible="payment_method_code not in ['wise_cad_domestic', 'wise_direct_deposit']
+                               or state != 'draft'
+                               or wise_payment_status not in ['uninitiated', 'new']
+                               or not payment_ids
+                               or amh_wise_balance_funding_status not in [False, 'not_funded']"
+                />
+                <button
+                    id="amh_wise_fund_balance_button"
+                    name="action_open_wise_balance_funding_wizard"
+                    type="object"
+                    string="Fund from Wise Balance"
+                    class="oe_highlight"
+                    groups="account.group_account_user"
+                    invisible="payment_method_code not in ['wise_cad_domestic', 'wise_direct_deposit']
+                               or not wise_batch_identifier
+                               or wise_payment_status != 'completed'
+                               or amh_wise_balance_funding_status not in [False, 'not_funded']"
+                />
+                <button
+                    id="amh_wise_send_remittance_button"
+                    name="action_amh_send_remittance"
+                    type="object"
+                    string="Send Remittance Advice"
+                    class="btn-secondary"
+                    groups="account.group_account_user"
+                    invisible="payment_method_code not in ['wise_cad_domestic', 'wise_direct_deposit']
+                               or not wise_batch_identifier
+                               or not payment_ids"
+                />
+            </xpath>
+        </field>
+    </record>
+</odoo>

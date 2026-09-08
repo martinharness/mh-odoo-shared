@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_account_payment_register_form_wise_cad" model="ir.ui.view">
+        <field name="name">account.payment.register.form.wise.cad</field>
+        <field name="model">account.payment.register</field>
+        <field name="inherit_id" ref="account.view_account_payment_register_form"/>
+        <field name="arch" type="xml">
+            <field name="payment_method_line_id" position="after">
+                <field name="payment_method_code" invisible="1"/>
+            </field>
+
+            <xpath expr="//footer/button[@name='action_create_payments']" position="attributes">
+                <attribute
+                    name="invisible"
+                    add="payment_method_code == 'wise_cad_domestic'"
+                    separator=" or "
+                />
+            </xpath>
+
+            <xpath expr="//footer/button[@special='cancel']" position="before">
+                <button
+                    string="Create Wise Batch"
+                    name="action_create_wise_batch"
+                    type="object"
+                    class="oe_highlight"
+                    data-hotkey="q"
+                    invisible="payment_method_code != 'wise_cad_domestic'"
+                />
+            </xpath>
+        </field>
+    </record>
+</odoo>

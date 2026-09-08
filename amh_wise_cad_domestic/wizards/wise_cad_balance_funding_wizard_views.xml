@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wise_cad_balance_funding_wizard_form" model="ir.ui.view">
+        <field name="name">amh.wise.cad.balance.funding.wizard.form</field>
+        <field name="model">amh.wise.cad.balance.funding.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Fund from Wise Balance">
+                <field name="batch_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <field name="is_uninitiated" invisible="1"/>
+
+                <div class="alert alert-warning" role="alert">
+                    <strong>This action moves money.</strong>
+                    Wise will deduct the batch amount and any Wise fees from the
+                    company's Wise balance in the batch currency, and begin
+                    processing the transfers immediately.
+                </div>
+                <div class="alert alert-info" role="alert" invisible="not is_uninitiated">
+                    Odoo will first create and complete the Wise batch, then fund it
+                    without redirecting you to the Wise website.
+                </div>
+
+                <group>
+                    <field name="batch_id"/>
+                    <field name="amount"/>
+                    <field name="payment_count"/>
+                </group>
+
+                <footer>
+                    <button
+                        string="Fund Now"
+                        name="action_confirm_funding"
+                        type="object"
+                        class="oe_highlight"
+                        data-hotkey="q"
+                    />
+                    <button
+                        string="Cancel"
+                        special="cancel"
+                        class="btn-secondary"
+                        data-hotkey="x"
+                    />
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

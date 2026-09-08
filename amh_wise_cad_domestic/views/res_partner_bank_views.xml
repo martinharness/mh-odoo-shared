@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_partner_bank_form_wise_cad_domestic" model="ir.ui.view">
+        <field name="name">res.partner.bank.form.wise.cad.domestic</field>
+        <field name="model">res.partner.bank</field>
+        <field name="inherit_id" ref="l10n_ca_payment_cpa005.view_partner_bank_form"/>
+        <field name="arch" type="xml">
+            <field name="l10n_ca_financial_institution_number" position="after">
+                <field name="amh_wise_cad_account_type" invisible="country_code != 'CA'"/>
+            </field>
+        </field>
+    </record>
+</odoo>
