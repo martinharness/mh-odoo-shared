@@ -6,6 +6,7 @@ Odoo.sh project. Each top-level folder is one installable module.
 | Module | Display name | Depends on |
 | --- | --- | --- |
 | `amh_bom_copy` | AMH Item & BoM Copy | `mrp`, `sale` |
+| `amh_customer_receipts` | Customer Receipts | `account` |
 | `amh_wise_cad_domestic` | AMH Wise CAD Domestic EFT | `l10n_us_direct_deposit`, `l10n_ca_payment_cpa005` (Enterprise) |
 
 ## Installing on Odoo.sh
@@ -33,6 +34,15 @@ for the module name and install.
 ### AMH Item & BoM Copy
 Works standalone. It cooperates with `sale_bom_component_pricing` and
 `amh_product_exact_search` when those are installed, but does not require them.
+
+### Customer Receipts
+A single-customer "Receive Payments" screen (*Accounting > Customers > Customer
+Receipts*) for keying a pile of cheques or e-Transfers straight into native Odoo
+customer payments, one customer at a time - the screen EBMS/QuickBooks have and
+Odoo does not. Keyboard-only entry (Customer -> Cheque/Reference -> Amount ->
+Alt+Q), with the invoices a cheque settles worked out from the amount. Depends
+only on `account`, so it runs on Community or Enterprise. See the module's own
+`README.md` for the full write-up.
 
 ### AMH Wise CAD Domestic EFT
 Requires the company to be connected to Wise in *Accounting > Settings* (the
