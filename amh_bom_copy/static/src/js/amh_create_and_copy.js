@@ -5,11 +5,14 @@ import { makeContext } from "@web/core/context";
 import { patch } from "@web/core/utils/patch";
 import { Many2XAutocomplete } from "@web/views/fields/relational_utils";
 import { SelectCreateDialog } from "@web/views/view_dialogs/select_create_dialog";
+import { FormViewDialog } from "@web/views/view_dialogs/form_view_dialog";
 
-// Which many2one targets get the extra entry.  Kept as a set so a second
-// model is a one-line change.  amh_product_exact_search patches
-// addCreateSuggestion on this same prototype against a similar set; the two
-// patches touch different methods and compose in either load order.
+// A product.template many2one gets the entry by its target model. A
+// product.product many2one - a purchase line, a BoM component, a manufacturing
+// order's product - opts in through its own context key, amh_create_copy, set
+// on the field in the view (see views/amh_copy_variant_fields.xml), so the
+// entry appears exactly there and not on every stock, inventory or invoice
+// product picker.
 const AMH_CREATE_AND_COPY_MODELS = new Set(["product.template"]);
 
 patch(Many2XAutocomplete.prototype, {
@@ -21,7 +24,10 @@ patch(Many2XAutocomplete.prototype, {
      */
     get actionSuggestions() {
         const suggestions = super.actionSuggestions;
-        if (!AMH_CREATE_AND_COPY_MODELS.has(this.props.resModel)) {
+        if (
+            !AMH_CREATE_AND_COPY_MODELS.has(this.props.resModel) &&
+            !(this.props.context && this.props.context.amh_create_copy)
+        ) {
             return suggestions;
         }
         suggestions.splice(Math.max(suggestions.length - 1, 0), 0, {
@@ -49,12 +55,20 @@ patch(Many2XAutocomplete.prototype, {
 
     /**
      * Pick a source item, ask the server what a copy of it looks like, then
-     * open the ordinary create dialog pre-filled with that.  Nothing is
+     * open the ordinary create form pre-filled with that.  Nothing is
      * written until the operator saves, so discarding still leaves no trace --
      * which is the whole reason "Create and edit..." is safe to reach for
      * after a mistyped reference.
+     *
+     * A product.product field copies at the template level instead (the
+     * picker, the defaults and the bill-of-materials copy all live on
+     * product.template), then drops the finished item's variant into the field
+     * -- see amhCreateAndCopyVariant.
      */
     amhCreateAndCopy(request) {
+        if (this.props.resModel === "product.product") {
+            return this.amhCreateAndCopyVariant(request);
+        }
         const { dialog, orm } = this.env.services;
         dialog.add(SelectCreateDialog, {
             title: _t("Copy which item?"),
@@ -87,6 +101,68 @@ patch(Many2XAutocomplete.prototype, {
                         defaults,
                     ]),
                     nextRecordsContext: this.props.context,
+                });
+            },
+        });
+    },
+
+    /**
+     * The product.product path (a purchase line, a BoM component, an MO's
+     * product).  The source picker and the create form run on
+     * product.template -- that is where amh_prepare_copy_defaults and the
+     * bill-of-materials copy live -- and the new template's variant is then set
+     * on this field.  Nothing is written until the operator saves the item, and
+     * the bill of materials comes across in that same save (product.template's
+     * create override reads amh_copy_source_id from the pre-filled defaults).
+     *
+     * A multi-variant copy lands the field on the template's primary variant.
+     */
+    amhCreateAndCopyVariant(request) {
+        const { dialog, orm } = this.env.services;
+        const fieldUpdate = this.props.update;
+        dialog.add(SelectCreateDialog, {
+            title: _t("Copy which item?"),
+            resModel: "product.template",
+            domain: [],
+            context: {
+                search_view_ref: "amh_bom_copy.view_product_template_search_amh_copy",
+            },
+            multiSelect: false,
+            noCreate: true,
+            onSelected: async (resIds) => {
+                const defaults = await orm.call(
+                    "product.template",
+                    "amh_prepare_copy_defaults",
+                    [[resIds[0]], request],
+                    {}
+                );
+                dialog.add(FormViewDialog, {
+                    resModel: "product.template",
+                    context: makeContext([defaults]),
+                    title: _t("Create Item (copy)"),
+                    onRecordSaved: async (record) => {
+                        const templateId = record.resId;
+                        const [template] = await orm.read(
+                            "product.template",
+                            [templateId],
+                            ["product_variant_id", "product_variant_ids"]
+                        );
+                        const variantId =
+                            (template.product_variant_id &&
+                                template.product_variant_id[0]) ||
+                            (template.product_variant_ids &&
+                                template.product_variant_ids[0]);
+                        if (variantId) {
+                            const [variant] = await orm.read(
+                                "product.product",
+                                [variantId],
+                                ["display_name"]
+                            );
+                            await fieldUpdate([
+                                { id: variantId, display_name: variant.display_name },
+                            ]);
+                        }
+                    },
                 });
             },
         });

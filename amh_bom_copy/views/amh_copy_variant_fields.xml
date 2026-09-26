@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Turn "Create and copy from..." on for three product.product pickers by
+        opting them in with the ``amh_create_copy`` context key the JS gate
+        reads (static/src/js/amh_create_and_copy.js).
+
+        Every product.template picker already gets the entry by its target
+        model. product.product pickers are everywhere - stock moves, inventory
+        counts, invoice lines - where "create a whole new item with a copied
+        BoM" is the wrong action, so it is enabled field by field here rather
+        than for the whole model.
+
+        A field's ``context`` attribute reaches the autocomplete widget, so the
+        key is added there. ``position="attributes"`` replaces the whole
+        attribute, so each field's existing context is reproduced verbatim with
+        the one key added. If a future Odoo version changes one of these base
+        contexts, re-sync it here.
+    -->
+
+    <!-- Purchase order line -->
+    <record id="view_purchase_order_form_amh_copy" model="ir.ui.view">
+        <field name="name">purchase.order.form.amh.copy</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='order_line']//field[@name='product_id']" position="attributes">
+                <attribute name="context">{'partner_id': partner_id, 'quantity': product_qty, 'company_id': parent.company_id, 'amh_create_copy': 1}</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Manufacturing order: the finished-product field (targeted by its
+         default_focus so the component-move product_id fields are left alone) -->
+    <record id="view_mrp_production_form_amh_copy" model="ir.ui.view">
+        <field name="name">mrp.production.form.amh.copy</field>
+        <field name="model">mrp.production</field>
+        <field name="inherit_id" ref="mrp.mrp_production_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='product_id'][@default_focus='1']" position="attributes">
+                <attribute name="context">{'default_is_storable': True, 'amh_create_copy': 1}</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- BoM component line -->
+    <record id="view_mrp_bom_form_amh_copy_line" model="ir.ui.view">
+        <field name="name">mrp.bom.form.amh.copy.line</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='bom_line_ids']//field[@name='product_id']" position="attributes">
+                <attribute name="context">{'default_is_storable': True, 'amh_create_copy': 1}</attribute>
+            </xpath>
+        </field>
+    </record>
+</odoo>

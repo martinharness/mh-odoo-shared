@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 {
     "name": "AMH Item & BoM Copy",
-    "version": "19.0.2.3.0",
+    "version": "19.0.2.4.0",
     "summary": "Copy an item and its bill of materials in one step, from the "
-               "sales order line, from Duplicate, or from the BoM form.",
+               "sales order line, purchase order line, BoM, manufacturing "
+               "order, from Duplicate, or from the BoM form.",
     "author": "Aaron Martin Harness Ltd",
     "category": "Manufacturing/Manufacturing",
     "license": "LGPL-3",
-    "depends": ["mrp", "sale"],
+    "depends": ["mrp", "sale", "purchase"],
     "data": [
         "views/product_views.xml",
         "views/mrp_bom_views.xml",
+        "views/amh_copy_variant_fields.xml",
     ],
     "assets": {
         "web.assets_backend": [
@@ -47,6 +49,17 @@ Because the bill of materials lands in the same save as the product, the
 sales order line prices off it immediately. Creating the product first and
 building its BoM afterwards leaves the line priced against a product that had
 no components yet.
+
+The same entry is on the **purchase order line**, the **BoM component line**
+and the **manufacturing order's product** as well. Those pick a
+``product.product`` (a variant) rather than a ``product.template``, so there
+the picker and the create form still run on the template -- where the copy and
+the bill of materials live -- and the finished item's variant is then dropped
+into the line. Each of those three fields opts in through an ``amh_create_copy``
+context key (see ``views/amh_copy_variant_fields.xml``); every other
+``product.product`` picker -- stock moves, inventory counts, invoice lines --
+is deliberately left alone, because "create a whole new item with a copied BoM"
+is the wrong action while picking a component or moving stock.
 
 2. Duplicate now carries the bill of materials
 -----------------------------------------------
@@ -197,10 +210,10 @@ More notes
   ``{enabled, build}`` descriptors. ``amh_product_exact_search`` patches
   ``addCreateSuggestion`` on the same prototype to remove the bare
   ``Create "xxx"`` row; the two touch different methods and compose in either
-  load order. Both are gated on ``props.resModel``, so the entry appears on
-  every ``product.template`` many2one in the backend, not only sales order
-  lines. That is deliberate -- the same shortcut is worth having on a purchase
-  line.
+  load order. The entry is gated on ``props.resModel`` being ``product.template``
+  or on an ``amh_create_copy`` context key for a ``product.product`` field, so
+  it appears on every ``product.template`` many2one plus the three
+  ``product.product`` fields opted in by the view, and nowhere else.
 * The five ``amh_copy_*`` fields on ``mrp.bom`` are stored columns on purpose.
   The copy runs from a ``type="object"`` button and the web client saves the
   form before executing a button, so the server reads the operator's choice
