@@ -1,5 +1,3 @@
-from itertools import combinations
-
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools import float_compare, float_is_zero
@@ -211,6 +209,9 @@ class AmhCustomerReceipt(models.TransientModel):
             return self.env["account.move"]
         rounding = (self.currency_id or self.env.company.currency_id).rounding
 
+        # Fast path: the oldest invoices up to an exact running total - a customer
+        # clearing their oldest balances (and "pay everything", where the running
+        # total lands on the target at the last invoice). Preferred and cheap.
         running = 0.0
         picked = self.env["account.move"]
         for m in moves:
@@ -221,22 +222,72 @@ class AmhCustomerReceipt(models.TransientModel):
             if float_compare(running, target, precision_rounding=rounding) > 0:
                 break
 
-        if len(moves) > 12:
-            return self.env["account.move"]
+        # General case: any subset that sums to the amount, but only act on it
+        # when it is the ONLY such subset. Meet-in-the-middle over integer cents,
+        # so it stays fast even for a customer with many open invoices - the old
+        # exhaustive search gave up above 12 open invoices, which is exactly the
+        # case that missed (e.g. paying 19 of a customer's 20 open invoices).
+        return self._mh_unique_invoice_subset(moves, target, rounding)
+
+    def _mh_unique_invoice_subset(self, moves, target, rounding):
+        """The moves of the UNIQUE subset that sums to ``target``, else empty.
+
+        Meet-in-the-middle: enumerate every subset sum of each half of the
+        invoices and pair them up. Each subset maps to exactly one (left, right)
+        split, so counting matching pairs counts distinct subsets; we stop at two
+        so an ambiguous amount is left for the user to tick by hand - the same
+        safety the old exhaustive search had, just without its 12-invoice ceiling.
+        Capped so a pathological number of open invoices can never hang the form.
+        """
+        self.ensure_one()
+        Move = self.env["account.move"]
+        if len(moves) > 30:
+            return Move
+        cents = [int(round(m.amount_residual / rounding)) for m in moves]
+        target_cents = int(round(target / rounding))
+        if target_cents <= 0:
+            return Move
+
+        def subset_sums(indices):
+            # {sum in cents: [count, one representative tuple of indices]}
+            indices = list(indices)
+            table = {}
+            for mask in range(1 << len(indices)):
+                total = 0
+                chosen = []
+                for bit, idx in enumerate(indices):
+                    if mask & (1 << bit):
+                        total += cents[idx]
+                        chosen.append(idx)
+                entry = table.get(total)
+                if entry is None:
+                    table[total] = [1, tuple(chosen)]
+                else:
+                    entry[0] += 1
+            return table
+
+        half = len(cents) // 2
+        left = subset_sums(range(half))
+        right = subset_sums(range(half, len(cents)))
+
+        count = 0
         found = None
-        for size in range(1, len(moves) + 1):
-            for combo in combinations(moves, size):
-                tot = sum(x.amount_residual for x in combo)
-                if not float_is_zero(tot - target, precision_rounding=rounding):
-                    continue
-                if found is not None:
-                    return self.env["account.move"]
-                found = combo
-        if not found:
-            return self.env["account.move"]
-        res = self.env["account.move"]
-        for m in found:
-            res |= m
+        for right_sum, (right_count, right_rep) in right.items():
+            left_entry = left.get(target_cents - right_sum)
+            if not left_entry:
+                continue
+            left_count, left_rep = left_entry
+            if found is None:
+                found = left_rep + right_rep
+            count += left_count * right_count
+            if count > 1:
+                return Move
+
+        if count != 1 or found is None:
+            return Move
+        res = Move
+        for idx in found:
+            res |= moves[idx]
         return res
 
     # ------------------------------------------------------------------
