@@ -41,6 +41,7 @@
                      context="{'amh_show_residual': True}"/>
               <field name="company_id" groups="base.group_multi_company"/>
               <field name="currency_id" invisible="1"/>
+              <field name="autofilled_total" invisible="1"/>
             </group>
           </group>
 

@@ -91,6 +91,14 @@ class AmhCustomerReceipt(models.TransientModel):
     amount = fields.Monetary(
         string="Amount Received", currency_field="currency_id",
     )
+    # The ticked-invoice total that last filled ``amount``. Ticking invoices
+    # fills the amount with their total, but that must only happen when the
+    # ticked total actually changes - otherwise an incidental recompute of the
+    # lines (the red-row ``is_discrepancy`` flag flips the moment a partial or
+    # write-off amount is typed) re-fires the lines onchange and snaps a
+    # hand-entered amount back to the full total. Comparing against this lets us
+    # tell a real tick/untick from that feedback loop. Not shown to the user.
+    autofilled_total = fields.Monetary(currency_field="currency_id")
 
     line_ids = fields.One2many(
         "amh.customer.receipt.line", "receipt_id", string="Open Invoices",
@@ -195,8 +203,12 @@ class AmhCustomerReceipt(models.TransientModel):
         self.line_ids = cmds
         if single:
             self.amount = invoices.amount_residual
+            self.autofilled_total = invoices.amount_residual
         elif preselect:
             self.amount = preselect.amount_residual
+            self.autofilled_total = preselect.amount_residual
+        else:
+            self.autofilled_total = 0.0
 
     def _find_invoice_combination(self, target):
         """Which open invoices add up to this amount? Oldest first, and only
@@ -331,9 +343,19 @@ class AmhCustomerReceipt(models.TransientModel):
 
     @api.onchange("line_ids")
     def _onchange_lines_set_amount(self):
-        """Ticking invoices sets the amount to their total - the usual case
-        (a cheque paying exactly what was picked)."""
+        """Ticking invoices fills the amount with their total - the usual case
+        (a cheque paying exactly what was picked).
+
+        Guarded so it only acts when the ticked total actually CHANGES. A change
+        to the lines that leaves the ticked total the same - above all the red
+        ``is_discrepancy`` flag recomputing the instant a partial or write-off
+        amount is typed - must not drag a hand-entered amount back to the full
+        total, or a custom amount could never be entered."""
         total = sum(self.line_ids.filtered("selected").mapped("amount_residual"))
+        rounding = (self.currency_id or self.company_id.currency_id).rounding
+        if float_compare(total, self.autofilled_total, precision_rounding=rounding) == 0:
+            return
+        self.autofilled_total = total
         if total:
             self.amount = total
 
@@ -350,6 +372,12 @@ class AmhCustomerReceipt(models.TransientModel):
             for line in self.line_ids:
                 if line.move_id in match:
                     line.selected = True
+            # The amount already equals this matched total; record it so the
+            # red-row recompute does not later treat it as a fresh selection and
+            # overwrite a subsequent manual edit.
+            self.autofilled_total = sum(
+                self.line_ids.filtered("selected").mapped("amount_residual")
+            )
 
     @api.onchange("writeoff")
     def _onchange_writeoff_needs_account(self):
