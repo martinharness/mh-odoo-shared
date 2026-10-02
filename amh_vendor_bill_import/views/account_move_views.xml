@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_move_form_amh_bill_import" model="ir.ui.view">
+        <field name="name">account.move.form.amh.bill.import</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <div name="journal_div" position="after">
+                <field name="amh_import_state" invisible="move_type != 'in_invoice'"/>
+                <field name="amh_vendor_invoice_no" invisible="not amh_vendor_invoice_no"/>
+            </div>
+            <div name="button_box" position="before">
+                <div class="alert alert-warning" role="alert"
+                     invisible="amh_import_state != 'parked'">
+                    <!-- the HTML twin of amh_import_note: same sentence, with
+                         the purchase order it names turned into a link -->
+                    <field name="amh_import_note_html" readonly="1" nolabel="1"/>
+                </div>
+                <!-- A bill the OCR filled is a GUESS, and the one thing that
+                     must not happen is it being posted on the assumption the
+                     module checked it. Nothing on this form says where the
+                     vendor and the total came from otherwise. Info, not
+                     warning: nothing is wrong with it, it just needs reading
+                     against the PDF beside it. -->
+                <div class="alert alert-info" role="alert"
+                     invisible="amh_import_state != 'ocr'">
+                    No parser recognised this invoice, so Odoo's digitisation
+                    read it. Check the vendor, the date, the reference and the
+                    total against the PDF before posting - these are its best
+                    guess, not a match to a purchase order.
+                </div>
+            </div>
+        </field>
+    </record>
+
+    <record id="view_invoice_tree_amh_bill_import" model="ir.ui.view">
+        <field name="name">account.move.list.amh.bill.import</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_invoice_tree"/>
+        <field name="arch" type="xml">
+            <!-- anchored on ref, not state: the invoice list view carries no
+                 state field in Odoo 19, only status_in_payment -->
+            <field name="ref" position="after">
+                <field name="amh_import_state" optional="show"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_account_invoice_filter_amh_bill_import" model="ir.ui.view">
+        <field name="name">account.move.search.amh.bill.import</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_account_invoice_filter"/>
+        <field name="arch" type="xml">
+            <filter name="draft" position="after">
+                <separator/>
+                <filter name="amh_parked" string="Needs Review"
+                        domain="[('amh_import_state', '=', 'parked')]"/>
+                <!-- the daily queue: everything the OCR read and nobody has
+                     checked yet. Drafts only, because a posted one is done. -->
+                <filter name="amh_ocr" string="From OCR, Unchecked"
+                        domain="[('amh_import_state', '=', 'ocr'), ('state', '=', 'draft')]"/>
+                <filter name="amh_imported" string="Imported Automatically"
+                        domain="[('amh_import_state', '=', 'imported')]"/>
+            </filter>
+        </field>
+    </record>
+
+    <record id="action_amh_import_now" model="ir.actions.server">
+        <field name="name">Import vendor bill now</field>
+        <field name="model_id" ref="account.model_account_move"/>
+        <field name="binding_model_id" ref="account.model_account_move"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="state">code</field>
+        <field name="code">records.action_amh_import_now()</field>
+    </record>
+</odoo>
