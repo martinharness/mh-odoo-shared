@@ -7,6 +7,7 @@ Odoo.sh project. Each top-level folder is one installable module.
 | --- | --- | --- |
 | `amh_bom_copy` | AMH Item & BoM Copy | `mrp`, `sale` |
 | `amh_customer_receipts` | Customer Receipts | `account` |
+| `amh_vendor_bill_import` | AMH Vendor Bill Import | `purchase_stock`, `account` |
 | `amh_wise_cad_domestic` | AMH Wise CAD Domestic EFT | `l10n_us_direct_deposit`, `l10n_ca_payment_cpa005` (Enterprise) |
 
 ## Installing on Odoo.sh
@@ -43,6 +44,24 @@ Odoo does not. Keyboard-only entry (Customer -> Cheque/Reference -> Amount ->
 Alt+Q), with the invoices a cheque settles worked out from the amount. Depends
 only on `account`, so it runs on Community or Enterprise. See the module's own
 `README.md` for the full write-up.
+
+### AMH Vendor Bill Import
+Reads a vendor's invoice PDF out of a Documents drop folder, matches it to the
+purchase order and posts a bill that agrees with the paper to the penny -
+or parks it with a plain-English reason. A PDF no parser recognises is handed
+to Odoo's invoice digitisation instead of being left for somebody to key.
+
+The engine is vendor-agnostic; adding a vendor is one file in
+`models/parsers/`. Two worked examples ship with it, one purchase-order
+invoice and one expense invoice, and the module's own `README.md` is a guide
+to writing your own - including the mistakes that cost the most to find and a
+list of Odoo 19 traps.
+
+Needs *Documents* (Enterprise) for the folder intake and
+`account_invoice_extract` for the OCR handoff, but depends on neither: both
+are detected at run time and it works without them. **Change the account codes
+in the system parameters to match your chart of accounts, and keep both crons
+disabled, until the parked/posted split looks right on a real batch.**
 
 ### AMH Wise CAD Domestic EFT
 Requires the company to be connected to Wise in *Accounting > Settings* (the

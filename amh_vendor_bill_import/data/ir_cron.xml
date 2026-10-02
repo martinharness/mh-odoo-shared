@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+      noupdate: these records carry state a human sets in Odoo - whether the
+      automation is running, and where the digest goes. Without the flag every
+      version bump re-applies the shipping defaults below over the live ones,
+      and "active" eval="False" turns the running import back off. That is
+      exactly what happened on one upgrade here: the import cron and the digest
+      were both silently switched off ten minutes after the last good run.
+      The defaults still apply on a FRESH install, which is the only time they
+      should.
+
+      The price of the flag: nothing below is updatable from XML any more, so
+      changing the code string or the interval on a database that already has
+      these records needs a migration step or a hand edit. A stopped cron is
+      the more expensive fault.
+
+      Do not look for this in the database: ir_model_data.noupdate stays False
+      for these rows, because the loader skips the record outright and never
+      gets as far as writing the flag. The protection is the attribute here in
+      the file, re-read on every upgrade.
+    -->
+    <data noupdate="1">
+        <record id="ir_cron_amh_vendor_bill_import" model="ir.cron">
+            <field name="name">Vendor Bills: read PDFs, match POs, post</field>
+            <field name="model_id" ref="account.model_account_move"/>
+            <field name="state">code</field>
+            <field name="code">model._amh_run_vendor_bill_import()</field>
+            <field name="interval_number">15</field>
+            <field name="interval_type">minutes</field>
+            <!-- ships off on purpose: watch the parked/posted split before letting it run -->
+            <field name="active" eval="False"/>
+        </record>
+
+        <record id="ir_cron_amh_vendor_bill_digest" model="ir.cron">
+            <field name="name">Vendor Bills: review digest</field>
+            <field name="model_id" ref="account.model_account_move"/>
+            <field name="state">code</field>
+            <field name="code">model._amh_send_review_digest()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="active" eval="False"/>
+        </record>
+
+        <!--
+          Left empty on purpose. With no address set, the digest goes to the
+          email of whichever user the cron runs as, which is a sane default and
+          means nobody else's address ships inside the module. Set it in
+          Settings > Technical > System Parameters once you know where you want
+          the daily review mail.
+        -->
+        <record id="amh_vendor_bill_digest_email" model="ir.config_parameter">
+            <field name="key">amh_vendor_bill_import.digest_email</field>
+            <field name="value"></field>
+        </record>
+    </data>
+</odoo>
