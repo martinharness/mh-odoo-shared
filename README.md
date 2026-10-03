@@ -70,14 +70,32 @@ connection is provided by Odoo's *United States - Direct Deposit* module). Tick
 
 Select posted CAD vendor bills, *Pay*, choose *Wise CAD Domestic EFT* and press
 *Create Wise Batch*: the payments, the reconciliation and the draft Wise batch
-are all made in one step. On the batch, *Initiate & Fund from Wise Balance*
-creates and completes the batch on Wise and funds it from the company's Wise
-balance - no trip to the Wise website - after a confirmation dialog that says
-plainly that it moves money. *Fund from Wise Balance* does the funding half on a
-batch already initiated, and is safe to press on one Wise has already paid: it
-reads the batch group first and records *Already Paid in Wise* rather than
-sending a second funding request. Both buttons work for USD
-*U.S. Direct Deposit* batches too.
+are all made in one step. A batch then has three ways out, and none of them
+ends on the Wise website:
+
+* **Initiate Payment** - Odoo's own button. Creates and completes the batch on
+  Wise and leaves the funding to be done in Wise.
+* **Initiate & Fund from Wise Balance** - creates, completes and funds it from
+  the company's Wise balance, after a confirmation that says plainly that it
+  moves money. *Fund from Wise Balance* does the funding half for a batch
+  already initiated, and is safe to press on one Wise has already paid: it reads
+  the batch group first and records *Already Paid in Wise* instead of sending a
+  second funding request.
+* **Initiate & Schedule Fund** - for a batch too large to prefund in a day. On
+  the Canadian side more than 25,000 cannot be moved into Wise instantly, and an
+  EFT takes up to a business day, so this initiates the batch now and books the
+  funding for a datetime you pick (defaulting to the next weekday at 15:00).
+  Nothing leaves the account until then, and the money travels to Wise in the
+  meantime. A cron, *Wise: fund scheduled batches from the Wise balance*, funds
+  it on its first run at or after that time - it is shipped active and every 15
+  minutes, and does nothing until a batch is actually scheduled. One attempt is
+  made, and the booking is cleared and committed before the attempt, so nothing
+  can be funded twice; if the balance is short, Wise's refusal is posted on the
+  batch as a message to its followers and the booking is dropped rather than
+  retried. *Cancel Scheduled Funding* drops it earlier, and *Fund from Wise
+  Balance* stays available if you would rather not wait.
+
+All of these work for USD *U.S. Direct Deposit* batches too.
 
 Remittance advice emails go to the vendor's `x_studio_eft_remittance_email`
 field if it exists (a Studio field on the contact), otherwise to the vendor's
