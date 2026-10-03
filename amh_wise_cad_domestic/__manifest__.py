@@ -1,6 +1,6 @@
 {
     "name": "AMH Wise CAD Domestic EFT",
-    "version": "19.0.1.8.0",
+    "version": "19.0.1.9.0",
     "category": "Accounting/Payment",
     "summary": "Pay Canadian vendors in CAD through Wise batch payments",
     "description": """
@@ -32,6 +32,15 @@ wise_account_type is therefore in the arch and on nobody's screen. Anchor on
 l10n_ca_financial_institution_number, and when a field will not appear, walk up
 its ancestors rather than trusting the arch.
 
+A batch too large to move into Wise in one go - more than 25,000 cannot be sent
+to Wise instantly on the Canadian side, and an EFT takes up to a business day -
+can instead be initiated now and have its funding booked for a datetime with
+Initiate & Schedule Fund. Wise creates and completes the batch group, nothing
+moves, and a cron funds it from the balance at the time set. The money travels
+to Wise in the meantime. One attempt is made and the schedule is cleared before
+it, so a batch is never funded twice; if the balance is short, Wise's refusal is
+posted on the batch and the funding waits for a person.
+
 Two things about balance funding that cost a live pay-run to find, both on
 3 Oct 2026, both in models/account_batch_payment_funding.py:
 
@@ -59,11 +68,13 @@ Two things about balance funding that cost a live pay-run to find, both on
         "security/ir.model.access.csv",
         "data/account_payment_method_data.xml",
         "data/repair_payment_method_links.xml",
+        "data/ir_cron.xml",
         "views/account_journal_views.xml",
         "views/res_partner_bank_views.xml",
         "views/account_payment_register_views.xml",
         "views/account_batch_payment_views.xml",
         "wizards/wise_cad_balance_funding_wizard_views.xml",
+        "wizards/wise_balance_schedule_wizard_views.xml",
     ],
     "installable": True,
     "application": False,

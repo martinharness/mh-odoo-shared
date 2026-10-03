@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_wise_balance_schedule_wizard_form" model="ir.ui.view">
+        <field name="name">amh.wise.balance.schedule.wizard.form</field>
+        <field name="model">amh.wise.balance.schedule.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Schedule Wise Balance Funding">
+                <field name="batch_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <field name="is_uninitiated" invisible="1"/>
+
+                <div class="alert alert-warning" role="alert">
+                    <strong>This books a transfer of money.</strong>
+                    At the time set below, Odoo deducts the batch amount and any
+                    Wise fees from the company's Wise balance and Wise begins
+                    sending the transfers. Nobody is asked again.
+                </div>
+                <div class="alert alert-info" role="alert" invisible="not is_uninitiated">
+                    Odoo will create and complete the batch on Wise now, and
+                    fund it at the time below. Nothing leaves the account until
+                    then, so the money has until that time to reach Wise.
+                </div>
+                <div class="alert alert-secondary" role="alert">
+                    One attempt is made. If the Wise balance is short at that
+                    moment the batch is left unfunded, the reason is written in
+                    the batch's chatter, and the schedule is dropped rather than
+                    retried - fund it by hand once the money is there.
+                </div>
+
+                <group>
+                    <field name="batch_id"/>
+                    <field name="amount"/>
+                    <field name="payment_count"/>
+                    <field name="scheduled_at"/>
+                </group>
+
+                <footer>
+                    <button
+                        string="Schedule Funding"
+                        name="action_schedule_funding"
+                        type="object"
+                        class="oe_highlight"
+                        data-hotkey="q"
+                    />
+                    <button
+                        string="Cancel"
+                        special="cancel"
+                        class="btn-secondary"
+                        data-hotkey="x"
+                    />
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

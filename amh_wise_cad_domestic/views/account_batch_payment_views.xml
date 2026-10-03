@@ -8,6 +8,7 @@
             <xpath expr="//sheet" position="inside">
                 <field name="amh_wise_balance_funding_status" invisible="1"/>
                 <field name="amh_wise_balance_funded_at" invisible="1"/>
+                <field name="amh_wise_fund_scheduled_at" invisible="1"/>
                 <div
                     class="alert alert-success"
                     role="alert"
@@ -18,6 +19,17 @@
                     <span invisible="not amh_wise_balance_funded_at">
                         on <field name="amh_wise_balance_funded_at"/>
                     </span>
+                </div>
+                <div
+                    class="alert alert-info"
+                    role="alert"
+                    invisible="not amh_wise_fund_scheduled_at"
+                >
+                    <strong>Funding scheduled</strong> for
+                    <field name="amh_wise_fund_scheduled_at"/>
+                    from the Wise balance. The batch is initiated; nothing leaves
+                    the account until then. One attempt is made, so make sure the
+                    balance covers this batch by that time.
                 </div>
             </xpath>
 
@@ -35,6 +47,25 @@
                                or not payment_ids
                                or amh_wise_balance_funding_status not in [False, 'not_funded']"
                 />
+                <!--
+                  The third way out of a draft batch, for one too large to move
+                  into Wise in a day: initiate now, fund at a time somebody
+                  picks. See models/account_batch_payment_schedule.py.
+                -->
+                <button
+                    id="amh_wise_initiate_and_schedule_fund_button"
+                    name="action_open_wise_balance_schedule_wizard"
+                    type="object"
+                    string="Initiate &amp; Schedule Fund"
+                    class="btn-secondary"
+                    groups="account.group_account_user"
+                    invisible="payment_method_code not in ['wise_cad_domestic', 'wise_direct_deposit']
+                               or state != 'draft'
+                               or wise_payment_status not in ['uninitiated', 'new']
+                               or not payment_ids
+                               or amh_wise_fund_scheduled_at
+                               or amh_wise_balance_funding_status not in [False, 'not_funded']"
+                />
                 <button
                     id="amh_wise_fund_balance_button"
                     name="action_open_wise_balance_funding_wizard"
@@ -46,6 +77,29 @@
                                or not wise_batch_identifier
                                or wise_payment_status != 'completed'
                                or amh_wise_balance_funding_status not in [False, 'not_funded']"
+                />
+                <button
+                    id="amh_wise_schedule_fund_balance_button"
+                    name="action_open_wise_balance_schedule_wizard"
+                    type="object"
+                    string="Schedule Fund from Wise Balance"
+                    class="btn-secondary"
+                    groups="account.group_account_user"
+                    invisible="payment_method_code not in ['wise_cad_domestic', 'wise_direct_deposit']
+                               or not wise_batch_identifier
+                               or wise_payment_status != 'completed'
+                               or amh_wise_fund_scheduled_at
+                               or amh_wise_balance_funding_status not in [False, 'not_funded']"
+                />
+                <button
+                    id="amh_wise_cancel_scheduled_fund_button"
+                    name="action_amh_cancel_scheduled_funding"
+                    type="object"
+                    string="Cancel Scheduled Funding"
+                    class="btn-secondary"
+                    groups="account.group_account_user"
+                    invisible="not amh_wise_fund_scheduled_at"
+                    confirm="Cancel the scheduled funding? The batch stays initiated on Wise and nothing is sent. You can still fund it by hand, or schedule it again."
                 />
                 <button
                     id="amh_wise_send_remittance_button"

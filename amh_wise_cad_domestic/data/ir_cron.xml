@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+      noupdate so that the interval, the active flag and the next run stay
+      wherever they are set in the database. An upgrade must not quietly put
+      this back to every 15 minutes, or switch it back on.
+
+      It is shipped ACTIVE, unlike most crons added by these modules, because
+      it does nothing on its own: it only acts on a batch somebody explicitly
+      scheduled, and one that is scheduled and never funded is worse than one
+      funded on time. Nothing is scheduled by default.
+    -->
+    <data noupdate="1">
+        <record id="ir_cron_amh_fund_scheduled_wise_batches" model="ir.cron">
+            <field name="name">Wise: fund scheduled batches from the Wise balance</field>
+            <field name="model_id" ref="amh_wise_cad_domestic.model_account_batch_payment"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_amh_fund_scheduled_wise_batches()</field>
+            <field name="interval_number">15</field>
+            <field name="interval_type">minutes</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>
