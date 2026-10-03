@@ -35,6 +35,16 @@ class AccountBatchPayment(models.Model):
         copy=False,
         tracking=True,
     )
+    amh_fund_from_balance_requested = fields.Boolean(
+        string="Fund From Wise Balance On Validation",
+        default=False,
+        copy=False,
+        readonly=True,
+        help="Set by the Fund from Wise Balance confirmation. It is stored "
+             "rather than passed in the context because Odoo answers a "
+             "validation warning with a second dialog, and a context does not "
+             "survive that.",
+    )
 
     def _amh_wise_balance_currency(self):
         """Currency of the Wise balance this batch would be funded from."""
@@ -42,17 +52,43 @@ class AccountBatchPayment(models.Model):
         return WISE_BALANCE_CURRENCY_BY_METHOD.get(self.payment_method_code)
 
     def _send_after_validation(self):
-        result = super()._send_after_validation()
-        if (
+        # Read the request BEFORE validating, and read it from the record as
+        # well as the context.
+        #
+        # The funding wizard calls validate_batch_button() with
+        # amh_fund_from_wise_balance in the context. But when the batch raises
+        # any validation WARNING - and a Wise batch whose payments are not
+        # dated today always raises one, "Wise will send the entire batch
+        # payment as soon as you fund it" - core does not validate. It answers
+        # with account.batch.error.wizard, and that wizard's "Proceed with
+        # validation" button calls validate_batch() fresh, without the context.
+        #
+        # That is how a live batch came out on 3 Oct 2026: state sent,
+        # wise_payment_status completed, amh_wise_balance_funding_status still
+        # not_funded, nothing in the chatter, and Odoo handing the user off to
+        # the Wise website to fund thirteen transfers he had just asked Odoo to
+        # fund. A stored request survives any number of dialogs in between.
+        requested = bool(
             self.env.context.get("amh_fund_from_wise_balance")
-            and self.payment_method_code in WISE_BALANCE_CURRENCY_BY_METHOD
-        ):
+            or self.amh_fund_from_balance_requested
+        )
+        result = super()._send_after_validation()
+        if requested and self.payment_method_code in WISE_BALANCE_CURRENCY_BY_METHOD:
+            # Cleared BEFORE funding, never after: if funding fails, the batch
+            # is already initiated and a flag left behind would silently fund
+            # the next validation too.
+            if self.amh_fund_from_balance_requested:
+                self.amh_fund_from_balance_requested = False
             # Persist the completed Wise batch before funding. If the balance is
             # insufficient, Odoo still remains aligned with the completed batch.
             if self._can_commit():
                 self.env.cr.commit()
             self._amh_fund_from_wise_balance()
             return self._amh_open_batch_action()
+        if self.amh_fund_from_balance_requested:
+            # Requested, but this batch is not one this module funds. Do not
+            # leave the flag lying on the record.
+            self.amh_fund_from_balance_requested = False
         return result
 
     def action_open_wise_balance_funding_wizard(self):
@@ -126,14 +162,36 @@ class AccountBatchPayment(models.Model):
                 raise UserError(
                     _("The batch must contain draft outgoing payments before initiation.")
                 )
-            future_payments = self.payment_ids.filtered(
-                lambda payment: payment.date != fields.Date.context_today(self)
+            # ONLY the future, and the variable is named for what it holds.
+            #
+            # Wise has no scheduling: funding sends the whole batch the moment
+            # it is funded. So a payment Odoo dates AHEAD of today would leave
+            # today while the books claim a later date, and that is worth
+            # refusing. A payment dated in the PAST is simply being paid late,
+            # which is what every batch prepared the evening before looks like,
+            # and needs no permission at all.
+            #
+            # This test read "!= today" from the day it was written, while
+            # calling its result future_payments - so it refused yesterday too.
+            # Because it raises UserError the dialog offers nothing but Close,
+            # and the only remedy it named was changing every payment date,
+            # which on posted payments means resetting them all to draft. A
+            # live batch of thirteen payments prepared the evening before was
+            # unfundable the next morning for that reason alone.
+            future_dated = self.payment_ids.filtered(
+                lambda payment: payment.date > fields.Date.context_today(self)
             )
-            if future_payments:
+            if future_dated:
                 raise UserError(
                     _(
-                        "Wise balance funding sends the whole batch immediately. "
-                        "Change all payment dates to today before using this option."
+                        "Wise balance funding sends the whole batch "
+                        "immediately, so a payment dated in the future cannot "
+                        "be funded this way. Set these to today or earlier "
+                        "first: %(payments)s",
+                        payments=", ".join(
+                            "%s (%s)" % (payment.display_name, payment.date)
+                            for payment in future_dated
+                        ),
                     )
                 )
             return
