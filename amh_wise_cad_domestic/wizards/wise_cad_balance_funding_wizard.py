@@ -48,9 +48,13 @@ class WiseCadBalanceFundingWizard(models.TransientModel):
         if batch.wise_payment_status == "completed":
             return batch.action_fund_from_wise_balance()
 
-        # Run the standard validation and Wise batch creation. The context flag
-        # makes the funding extension fund the completed batch instead of opening
-        # the Wise website.
+        # Run the standard validation and Wise batch creation. The request is
+        # WRITTEN on the batch as well as put in the context: when the batch
+        # raises a validation warning, core answers with its own dialog and the
+        # context does not survive the "Proceed with validation" button on it.
+        # See _send_after_validation in models/account_batch_payment_funding.py
+        # for what that cost on 3 Oct 2026.
+        batch.amh_fund_from_balance_requested = True
         return batch.with_context(
             amh_fund_from_wise_balance=True
         ).validate_batch_button()

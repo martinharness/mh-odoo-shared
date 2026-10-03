@@ -1,4 +1,4 @@
-from odoo import api, fields, models
+from odoo import _, api, fields, models
 
 
 class ResPartnerBank(models.Model):
@@ -54,3 +54,33 @@ class ResPartnerBank(models.Model):
             super(ResPartnerBank, others)._compute_wise_bank_account()
         for bank in canadian:
             bank.wise_bank_account = False
+
+    def action_amh_forget_wise_recipient(self):
+        """Drop the stored Wise recipient id so the next payment re-links it.
+
+        The id belongs to Wise, not to this database, and it can stop being
+        valid on their side - the recipient deleted, or created on a profile the
+        company no longer pays from. When that happens every payment to the
+        vendor dies at the quote with "We couldn't find an account with that ID",
+        and until now there was nothing anywhere in Odoo to clear: the field is
+        readonly, computed, and on no form.
+
+        Clearing is the ONLY edit offered here, and that is deliberate. A
+        mistyped recipient id is a payment into a stranger's account; an empty
+        one costs the next run a lookup and nothing else. So the field is shown
+        and can be emptied, never typed into.
+        """
+        for bank in self:
+            forgotten = bank.wise_bank_account
+            if not forgotten:
+                continue
+            bank.wise_bank_account = False
+            bank.partner_id.message_post(
+                body=_(
+                    "Wise recipient %(recipient)s forgotten. The next Wise payment "
+                    "to this bank account will match or create the recipient in "
+                    "Wise and store the new id.",
+                    recipient=forgotten,
+                )
+            )
+        return True

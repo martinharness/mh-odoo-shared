@@ -1,5 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!--
+      Both additions hang off l10n_ca_financial_institution_number, and that
+      anchor is chosen rather than inherited from the Wise fields next door.
+
+      The obvious place for the Wise recipient id is after wise_account_type,
+      which l10n_us_direct_deposit adds. Do that and it renders nowhere: hr
+      wraps that part of the form in <div invisible="not
+      employee_has_multiple_bank_accounts">, so anything placed after
+      wise_account_type is inside a div that is hidden for every bank account
+      that is not an employee's second one. The field was in the arch, absent
+      from the screen, and nothing about it looked wrong. (The same div is why
+      Direct Deposit Transfer Type cannot be seen on a vendor either.)
+
+      Check the ancestors, not just the arch, when a field will not appear:
+      get_views -> parse -> walk up from the field and look for an invisible
+      parent.
+    -->
     <record id="view_partner_bank_form_wise_cad_domestic" model="ir.ui.view">
         <field name="name">res.partner.bank.form.wise.cad.domestic</field>
         <field name="model">res.partner.bank</field>
@@ -7,6 +24,26 @@
         <field name="arch" type="xml">
             <field name="l10n_ca_financial_institution_number" position="after">
                 <field name="amh_wise_cad_account_type" invisible="country_code != 'CA'"/>
+                <!--
+                  The Wise recipient id, which no view in Odoo puts on screen.
+                  It is the id Wise pays to, and when it goes stale on Wise's
+                  side - the recipient deleted, or made on another profile -
+                  every payment to the vendor fails at the quote with nothing
+                  to look at and nothing to clear. Readonly: it can be emptied
+                  with Forget, never typed into. See
+                  action_amh_forget_wise_recipient.
+                -->
+                <label for="wise_bank_account"/>
+                <div class="o_row">
+                    <field name="wise_bank_account"
+                           placeholder="Not linked to Wise yet"/>
+                    <button name="action_amh_forget_wise_recipient"
+                            type="object"
+                            string="Forget"
+                            class="btn-link"
+                            invisible="not wise_bank_account"
+                            confirm="Forget the Wise recipient stored on this bank account? The next Wise payment will match or create the recipient in Wise and store the new id. Use this when Wise reports that it cannot find an account with this ID."/>
+                </div>
             </field>
         </field>
     </record>
