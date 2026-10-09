@@ -1,6 +1,6 @@
 {
     "name": "Customer Receipts",
-    "version": "19.0.3.3.0",
+    "version": "19.0.3.3.1",
     "category": "Accounting/Accounting",
     "summary": "Key a pile of customer cheques or e-Transfers straight into native Odoo payments, one customer at a time",
     "description": """
