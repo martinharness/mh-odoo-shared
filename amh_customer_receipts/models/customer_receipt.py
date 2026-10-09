@@ -1,3 +1,5 @@
+import re
+
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools import float_compare, float_is_zero
@@ -69,6 +71,16 @@ class AmhCustomerReceipt(models.TransientModel):
                " ('amount_residual', '>', 0)]",
         help="Type an invoice number to pull up its customer and their open "
              "invoices (that invoice is ticked for you).",
+    )
+    invoice_paste = fields.Text(
+        string="Paste Invoice #s",
+        help="Paste the invoice numbers from a remittance / ACH report / cheque "
+             "stub (one per line, or separated by spaces or commas) to tick "
+             "exactly those invoices - handy when a payment's amount matches "
+             "more than one combination. Anything that is not one of this "
+             "customer's open invoice numbers is ignored, so pasting the whole "
+             "report is fine. Pick the customer first, or the paste will adopt "
+             "the customer of the first invoice it recognises.",
     )
 
     journal_id = fields.Many2one(
@@ -210,6 +222,70 @@ class AmhCustomerReceipt(models.TransientModel):
         else:
             self.autofilled_total = 0.0
 
+    # ------------------------------------------------------------------
+    # pasted-invoice-number matching (remittance / ACH report / cheque stub)
+    # ------------------------------------------------------------------
+    @api.model
+    def _mh_paste_tokens(self, text):
+        """Candidate invoice references pulled from pasted text: every maximal
+        run of digits, plus any slash-bearing code (e.g. INV/2026/21630),
+        upper-cased. Noise (dates, amounts, names) simply will not match a real
+        open-invoice number later."""
+        text = (text or "").upper()
+        tokens = set(re.findall(r"\d+", text))
+        tokens |= set(re.findall(r"[A-Z0-9]+(?:/[A-Z0-9]+)+", text))
+        tokens.discard("")
+        return tokens
+
+    @api.model
+    def _mh_invoice_keys(self, move):
+        """The ways a user / remittance might write this invoice's number: its
+        full name, the part after the last '/', and its trailing run of digits."""
+        name = (move.name or "").upper()
+        keys = {name}
+        if "/" in name:
+            keys.add(name.rsplit("/", 1)[-1])
+        trailing = re.search(r"(\d+)\D*$", name)
+        if trailing:
+            keys.add(trailing.group(1))
+        keys.discard("")
+        return keys
+
+    def _parse_pasted_invoices(self, text):
+        """The open-invoice lines whose number appears in the pasted text."""
+        self.ensure_one()
+        tokens = self._mh_paste_tokens(text)
+        if not tokens:
+            return self.env["account.move"]
+        matched = self.env["account.move"]
+        for line in self.line_ids:
+            if self._mh_invoice_keys(line.move_id) & tokens:
+                matched |= line.move_id
+        return matched
+
+    def _mh_adopt_partner_from_paste(self, text):
+        """With no customer picked yet, adopt the customer of the first pasted
+        number that matches an open customer invoice, and load their invoices.
+        Returns True on success. Longer (more invoice-like) tokens are tried
+        first so a two-digit date fragment does not win over a real number."""
+        self.ensure_one()
+        Move = self.env["account.move"]
+        for tok in sorted(self._mh_paste_tokens(text), key=len, reverse=True):
+            if not tok.isdigit():
+                continue
+            candidates = Move.search([
+                ("move_type", "=", "out_invoice"),
+                ("state", "=", "posted"),
+                ("amount_residual", ">", 0),
+                ("name", "=like", "%" + tok),
+            ], limit=5)
+            hit = candidates.filtered(lambda m: tok in self._mh_invoice_keys(m))[:1]
+            if hit:
+                self.partner_id = hit.commercial_partner_id
+                self._rebuild_lines()
+                return True
+        return False
+
     def _find_invoice_combination(self, target):
         """Which open invoices add up to this amount? Oldest first, and only
         where the answer is unambiguous (mirrors the batch tool)."""
@@ -241,24 +317,26 @@ class AmhCustomerReceipt(models.TransientModel):
         # case that missed (e.g. paying 19 of a customer's 20 open invoices).
         return self._mh_unique_invoice_subset(moves, target, rounding)
 
-    def _mh_unique_invoice_subset(self, moves, target, rounding):
-        """The moves of the UNIQUE subset that sums to ``target``, else empty.
+    def _mh_subset_search(self, moves, target, rounding):
+        """Meet-in-the-middle subset-sum. Returns ``(count, moves)`` where
+        ``count`` is 0, 1 or 2 (2 meaning "two or more") and ``moves`` is the
+        first subset found (empty when none).
 
-        Meet-in-the-middle: enumerate every subset sum of each half of the
-        invoices and pair them up. Each subset maps to exactly one (left, right)
-        split, so counting matching pairs counts distinct subsets; we stop at two
-        so an ambiguous amount is left for the user to tick by hand - the same
-        safety the old exhaustive search had, just without its 12-invoice ceiling.
+        Enumerate every subset sum of each half of the invoices and pair them
+        up. Each subset maps to exactly one (left, right) split, so counting
+        matching pairs counts distinct subsets; we stop at two so an ambiguous
+        amount can be reported and left for the user to tick by hand - the same
+        safety the old exhaustive search had, without its 12-invoice ceiling.
         Capped so a pathological number of open invoices can never hang the form.
         """
         self.ensure_one()
         Move = self.env["account.move"]
         if len(moves) > 30:
-            return Move
+            return 0, Move
         cents = [int(round(m.amount_residual / rounding)) for m in moves]
         target_cents = int(round(target / rounding))
         if target_cents <= 0:
-            return Move
+            return 0, Move
 
         def subset_sums(indices):
             # {sum in cents: [count, one representative tuple of indices]}
@@ -293,14 +371,19 @@ class AmhCustomerReceipt(models.TransientModel):
                 found = left_rep + right_rep
             count += left_count * right_count
             if count > 1:
-                return Move
+                break
 
-        if count != 1 or found is None:
-            return Move
+        if found is None:
+            return 0, Move
         res = Move
         for idx in found:
             res |= moves[idx]
-        return res
+        return (1 if count == 1 else 2), res
+
+    def _mh_unique_invoice_subset(self, moves, target, rounding):
+        """The moves of the UNIQUE subset that sums to ``target``, else empty."""
+        count, res = self._mh_subset_search(moves, target, rounding)
+        return res if count == 1 else self.env["account.move"]
 
     # ------------------------------------------------------------------
     # onchanges
@@ -334,6 +417,44 @@ class AmhCustomerReceipt(models.TransientModel):
             return
         self.partner_id = inv.commercial_partner_id
         self._rebuild_lines(preselect=inv)
+
+    @api.onchange("invoice_paste")
+    def _onchange_invoice_paste(self):
+        """Paste the invoice numbers from a remittance and tick exactly those,
+        regardless of amount - the reliable answer when an amount matches more
+        than one combination of invoices. Replaces the current selection with
+        the pasted set and fills the amount with their total."""
+        text = self.invoice_paste or ""
+        if not text.strip():
+            return
+        if not self.partner_id and not self._mh_adopt_partner_from_paste(text):
+            return {"warning": {
+                "title": _("No matching invoice"),
+                "message": _(
+                    "None of the pasted numbers matched an open customer "
+                    "invoice. Pick the customer first, then paste."
+                ),
+            }}
+        matched = self._parse_pasted_invoices(text)
+        if not matched:
+            return {"warning": {
+                "title": _("No matching invoice"),
+                "message": _(
+                    "None of the pasted numbers matched an open invoice for %s.",
+                    self.partner_id.display_name,
+                ),
+            }}
+        matched_ids = set(matched.ids)
+        for line in self.line_ids:
+            line.selected = line.move_id.id in matched_ids
+        total = sum(self.line_ids.filtered("selected").mapped("amount_residual"))
+        self.amount = total
+        self.autofilled_total = total
+        self.last_result = _(
+            "Ticked %(n)s invoice(s) from the pasted list - total %(total)s.",
+            n=len(matched),
+            total=formatLang(self.env, total, currency_obj=self.currency_id),
+        )
 
     @api.onchange("journal_id")
     def _onchange_journal(self):
@@ -377,6 +498,24 @@ class AmhCustomerReceipt(models.TransientModel):
             # overwrite a subsequent manual edit.
             self.autofilled_total = sum(
                 self.line_ids.filtered("selected").mapped("amount_residual")
+            )
+            return
+        # Nothing was ticked. If the amount matches MORE THAN ONE combination of
+        # open invoices, say so - otherwise the user is left wondering why the
+        # auto-tick "did nothing". (Only the subset path can be ambiguous; the
+        # fast path is exact. A genuine part payment - no subset at all - stays
+        # silent, since typing an odd amount for a partial is normal.)
+        moves = self.line_ids.mapped("move_id").sorted(
+            key=lambda m: (m.invoice_date or m.date, m.id)
+        )
+        rounding = (self.currency_id or self.company_id.currency_id).rounding
+        count, _subset = self._mh_subset_search(moves, self.amount, rounding)
+        if count >= 2:
+            self.last_result = _(
+                "That amount matches more than one combination of open invoices, "
+                "so none were ticked automatically. Tick them by hand, or paste "
+                "the invoice numbers from the remittance into “Paste Invoice "
+                "#s”."
             )
 
     @api.onchange("writeoff")
