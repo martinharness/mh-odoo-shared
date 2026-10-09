@@ -39,6 +39,8 @@
               <field name="payment_date"/>
               <field name="invoice_lookup_id" options="{'no_create': True}"
                      context="{'amh_show_residual': True}"/>
+              <field name="invoice_paste" widget="text"
+                     placeholder="Paste invoice #s from a remittance (one per line, or separated by spaces / commas) to tick exactly those"/>
               <field name="company_id" groups="base.group_multi_company"/>
               <field name="currency_id" invisible="1"/>
               <field name="autofilled_total" invisible="1"/>
