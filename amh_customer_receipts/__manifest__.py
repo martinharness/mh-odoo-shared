@@ -1,6 +1,6 @@
 {
     "name": "Customer Receipts",
-    "version": "19.0.3.2.0",
+    "version": "19.0.3.3.0",
     "category": "Accounting/Accounting",
     "summary": "Key a pile of customer cheques or e-Transfers straight into native Odoo payments, one customer at a time",
     "description": """
@@ -19,6 +19,12 @@ Payment (Alt+Q) and a native Odoo customer payment is created for the ticked
 invoices - no separate document - then the screen clears for the next customer
 with the cursor back on the customer field. The journal and payment method
 default to the ones you used last.
+
+When a payment's amount matches more than one combination of open invoices (so
+guessing from the amount would be a coin toss), paste the invoice numbers from
+the customer's remittance / ACH report / cheque stub into Paste Invoice #s and
+exactly those invoices are ticked - anything that is not one of their open
+invoice numbers is ignored, so pasting the whole report is fine.
 
 Built for keyboard-only entry: Customer -> Cheque/Reference -> Amount by Tab, so
 a stack of cheques is keyed without reaching for the mouse. Small over/under
