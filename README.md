@@ -97,15 +97,43 @@ ends on the Wise website:
 
 All of these work for USD *U.S. Direct Deposit* batches too.
 
-Remittance advice emails go to the vendor's `x_studio_eft_remittance_email`
-field if it exists (a Studio field on the contact), otherwise to the vendor's
-main email address. The vendor's email is deliberately kept off the Wise
-recipient so Wise sends no notification of its own - Wise's reference is capped
-short and only fits one invoice number, while *Send Remittance Advice* emails
-one message per vendor listing every bill the batch paid them.
+#### The remittance advice
 
-Three things worth knowing before the first run, each of which cost a live
-pay-run to find:
+Advice emails go to the vendor's `x_studio_eft_remittance_email` field if it
+exists (a Studio field on the contact), otherwise to the vendor's main email
+address. The vendor's email is deliberately kept off the Wise recipient so Wise
+sends no notification of its own - Wise's reference is capped short and only
+fits one invoice number, while the advice is one message per vendor listing
+every bill the batch paid them.
+
+It is sent **automatically once the batch is funded from the Wise balance**,
+including by the scheduled cron: the scheduler funds through the same call the
+button does, and the automatic send is imported last in `models/__init__.py` so
+that it wraps both the funding and the schedule overrides. The vendor is told at
+the moment the money actually moves rather than when the batch was initiated,
+which for a scheduled batch can be a day or two later.
+
+* A funding Wise refuses never reaches that point, so nobody is told they have
+  been paid when they have not. Press *Fund from Wise Balance* once the money is
+  in Wise and the advice goes then.
+* Each payment records that its vendor has been told, so the button after an
+  automatic send does nothing, and a part-sent batch only emails the rest.
+* A failure to email can never undo a funding: the funded state is committed
+  first and the send runs inside a savepoint, with any error logged and posted
+  on the batch for the button to retry.
+
+Where an **early-payment discount** was taken, the table gains *Discount* and
+*Paid* columns. The discount is read off the bill's own payment-term lines and
+counted only when the payment is dated on or before the discount date - never
+inferred from the gap between what was billed and what was sent, because that
+gap is also what a part payment looks like. The columns print only when the
+table proves itself: amounts less discounts must equal the figure sent, in one
+currency, to the cent. Anything else - a part payment, a credit note, a second
+currency - falls back to the plain invoice/date/amount advice.
+
+#### Three things worth knowing before the first run
+
+Each of these cost a live pay-run to find:
 
 * **Wise will not send to a P.O. box.** Where the vendor's `street` holds a box
   beside a real address, or the real address is on `street2`, the box is

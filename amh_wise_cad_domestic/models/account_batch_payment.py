@@ -389,31 +389,87 @@ class AccountBatchPayment(models.Model):
             },
         }
 
+    def _amh_remittance_discount(self, bill, payment):
+        """The early-payment discount this payment took on this bill.
+
+        Read off the bill's own payment-term lines, never inferred from the
+        gap between what was billed and what was sent: that gap is also what a
+        PART PAYMENT looks like, and calling a part payment a discount on a
+        vendor's own remittance would be worse than saying nothing at all.
+        Odoo keeps the discounted figure (``discount_amount_currency``) and the
+        day it lapses (``discount_date``) on each term line, so the discount is
+        counted only when the payment is dated on or before that day.
+        """
+        terms = bill.line_ids.filtered(
+            lambda line: line.display_type == "payment_term")
+        billed = sum(abs(line.amount_currency) for line in terms)
+        payable = sum(
+            abs(line.discount_amount_currency)
+            if (line.discount_date and line.discount_amount_currency
+                and payment.date and payment.date <= line.discount_date)
+            else abs(line.amount_currency)
+            for line in terms)
+        return (bill.currency_id or self.currency_id).round(billed - payable)
+
+    def _amh_remittance_shows_discount(self, rows, total, currency):
+        """Whether the discount columns are worth printing, and are provable.
+
+        Three conditions, and the third is the one that matters: the table has
+        to add up. Amounts less discounts must come to the figure actually
+        sent, in one currency, to the cent. If it does not, something else is
+        going on - a part payment, a credit note, a second currency - and the
+        advice falls back to the plain three-column table it has always sent
+        rather than publishing an explanation it cannot stand behind.
+        """
+        if not any(row["discount"] for row in rows):
+            return False
+        if any(row["currency"] != currency for row in rows):
+            return False
+        net = sum(row["amount"] - row["discount"] for row in rows)
+        return currency.compare_amounts(net, total) == 0
+
     def _amh_build_remittance_body(self, partner, payments, company, total):
         """HTML body listing the bills this batch paid a single vendor."""
         currency = self.currency_id
         pay_date = format_date(self.env, self.date) if self.date else ""
 
-        rows_html = ""
+        rows = []
         for payment in payments:
             for bill in payment.reconciled_bill_ids:
-                number = bill.ref or bill.name or ""
-                bill_date = (
-                    format_date(self.env, bill.invoice_date)
-                    if bill.invoice_date else ""
-                )
-                amount = formatLang(
-                    self.env, abs(bill.amount_total),
-                    currency_obj=bill.currency_id or currency,
-                )
-                rows_html += (
-                    "<tr>"
-                    "<td style='padding:6px 12px;border-bottom:1px solid #eee;'>%s</td>"
-                    "<td style='padding:6px 12px;border-bottom:1px solid #eee;'>%s</td>"
-                    "<td style='padding:6px 12px;border-bottom:1px solid #eee;"
-                    "text-align:right;'>%s</td>"
-                    "</tr>"
-                ) % (number, bill_date, amount)
+                rows.append({
+                    "number": bill.ref or bill.name or "",
+                    "date": (
+                        format_date(self.env, bill.invoice_date)
+                        if bill.invoice_date else ""
+                    ),
+                    "amount": abs(bill.amount_total),
+                    "discount": self._amh_remittance_discount(bill, payment),
+                    "currency": bill.currency_id or currency,
+                })
+
+        # The discount columns appear only on an advice that took one, so an
+        # ordinary remittance looks exactly as it always has.
+        show_discount = self._amh_remittance_shows_discount(rows, total, currency)
+
+        body_cell = "padding:6px 12px;border-bottom:1px solid #eee;"
+        head_cell = "padding:6px 12px;border-bottom:2px solid #333;"
+
+        rows_html = ""
+        for row in rows:
+            money = lambda value: formatLang(  # noqa: E731
+                self.env, value, currency_obj=row["currency"])
+            cells = [
+                "<td style='%s'>%s</td>" % (body_cell, row["number"]),
+                "<td style='%s'>%s</td>" % (body_cell, row["date"]),
+                "<td style='%stext-align:right;'>%s</td>" % (
+                    body_cell, money(row["amount"])),
+            ]
+            if show_discount:
+                cells.append("<td style='%stext-align:right;'>%s</td>" % (
+                    body_cell, money(row["discount"]) if row["discount"] else ""))
+                cells.append("<td style='%stext-align:right;'>%s</td>" % (
+                    body_cell, money(row["amount"] - row["discount"])))
+            rows_html += "<tr>%s</tr>" % "".join(cells)
 
         if not rows_html:
             # No bills linked (e.g. a payment on account): still show the amount.
@@ -424,6 +480,13 @@ class AccountBatchPayment(models.Model):
                 self.env._("Payment on account"),
                 formatLang(self.env, total, currency_obj=currency),
             )
+
+        headings = [("Invoice", "left"), ("Date", "left"), ("Amount", "right")]
+        if show_discount:
+            headings += [("Discount", "right"), ("Paid", "right")]
+        head_html = "".join(
+            "<th style='%stext-align:%s;'>%s</th>" % (head_cell, align, label)
+            for label, align in headings)
 
         total_str = formatLang(self.env, total, currency_obj=currency)
         wise_ref = self.wise_batch_identifier or ", ".join(
@@ -436,18 +499,11 @@ class AccountBatchPayment(models.Model):
             "<p>This confirms a payment of <strong>%(total)s</strong> sent to you "
             "by <strong>%(company)s</strong> via Wise (CAD Domestic EFT)%(date)s.</p>"
             "<p>It was applied to the following invoice(s):</p>"
-            "<table style='border-collapse:collapse;width:100%%;max-width:520px;'>"
-            "<thead><tr>"
-            "<th style='padding:6px 12px;text-align:left;border-bottom:2px solid "
-            "#333;'>Invoice</th>"
-            "<th style='padding:6px 12px;text-align:left;border-bottom:2px solid "
-            "#333;'>Date</th>"
-            "<th style='padding:6px 12px;text-align:right;border-bottom:2px solid "
-            "#333;'>Amount</th>"
-            "</tr></thead>"
+            "<table style='border-collapse:collapse;width:100%%;max-width:%(width)spx;'>"
+            "<thead><tr>%(head)s</tr></thead>"
             "<tbody>%(rows)s</tbody>"
             "<tfoot><tr>"
-            "<td colspan='2' style='padding:8px 12px;text-align:right;"
+            "<td colspan='%(span)s' style='padding:8px 12px;text-align:right;"
             "font-weight:bold;'>Total paid</td>"
             "<td style='padding:8px 12px;text-align:right;font-weight:bold;'>"
             "%(total)s</td>"
@@ -461,7 +517,10 @@ class AccountBatchPayment(models.Model):
             "total": total_str,
             "company": company.name or "",
             "date": (" on %s" % pay_date) if pay_date else "",
+            "head": head_html,
             "rows": rows_html,
+            "span": len(headings) - 1,
+            "width": 700 if show_discount else 520,
             "ref": (
                 "<p style='color:#666;font-size:12px;'>Wise reference: %s</p>" % wise_ref
             ) if wise_ref else "",

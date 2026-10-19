@@ -1,6 +1,6 @@
 {
     "name": "AMH Wise CAD Domestic EFT",
-    "version": "19.0.1.9.0",
+    "version": "19.0.1.10.0",
     "category": "Accounting/Payment",
     "summary": "Pay Canadian vendors in CAD through Wise batch payments",
     "description": """
@@ -40,6 +40,25 @@ moves, and a cron funds it from the balance at the time set. The money travels
 to Wise in the meantime. One attempt is made and the schedule is cleared before
 it, so a batch is never funded twice; if the balance is short, Wise's refusal is
 posted on the batch and the funding waits for a person.
+
+The remittance advice is emailed automatically once a batch is funded from the
+Wise balance, by the button or by the scheduled cron - the scheduler funds
+through the same call the button does, and the automatic send is imported last
+so that it wraps both. The vendor is therefore told at the moment the money
+actually moves rather than when the batch was initiated, which for a scheduled
+batch can be a day or two later. A funding Wise refuses never reaches that
+point, so nobody is told they have been paid when they have not. Each payment
+records that its vendor has been told, so no vendor is told twice, and a
+failure to email can never undo a funding: the funded state is committed first
+and the send runs inside a savepoint.
+
+Where an early-payment discount was taken, the advice gains Discount and Paid
+columns. The discount is read off the bill's own payment-term lines and counted
+only when the payment is dated on or before the discount date - never inferred
+from the gap between what was billed and what was sent, because that gap is
+also what a part payment looks like. The columns print only when the table
+proves itself: amounts less discounts must equal the figure actually sent, in
+one currency, to the cent. Anything else falls back to the plain advice.
 
 Two things about balance funding that cost a live pay-run to find, both on
 3 Oct 2026, both in models/account_batch_payment_funding.py:
