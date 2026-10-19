@@ -16,3 +16,7 @@ from . import wise_transfer_reference
 # first, so this has to be imported last to sit outside the others and explain
 # the errors they raise.
 from . import wise_stale_recipient
+
+# After the CAD and USD remittance methods and the funding / schedule overrides,
+# so it wraps all of them: it sends the remittance once funding has gone through.
+from . import account_batch_payment_remittance_auto
