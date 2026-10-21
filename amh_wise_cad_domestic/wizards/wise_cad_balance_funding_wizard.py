@@ -1,5 +1,6 @@
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
+from odoo.tools import format_date
 
 
 class WiseCadBalanceFundingWizard(models.TransientModel):
@@ -26,6 +27,7 @@ class WiseCadBalanceFundingWizard(models.TransientModel):
         compute="_compute_payment_count",
     )
     is_uninitiated = fields.Boolean(compute="_compute_is_uninitiated")
+    date_note = fields.Char(compute="_compute_date_note")
 
     @api.depends("batch_id.payment_ids")
     def _compute_payment_count(self):
@@ -37,6 +39,36 @@ class WiseCadBalanceFundingWizard(models.TransientModel):
         for wizard in self:
             wizard.is_uninitiated = (
                 wizard.batch_id.wise_payment_status != "completed"
+            )
+
+    @api.depends("batch_id.payment_ids.date")
+    def _compute_date_note(self):
+        """One line when the batch is not dated today.
+
+        Core says this in a dialog headed "The batch cannot be validated",
+        which models/account_batch_payment_warnings.py now drops for a batch
+        dated today or earlier. The fact itself is worth saying once - but here,
+        where the money is actually about to move, and about the money rather
+        than about validation.
+        """
+        today = fields.Date.context_today(self)
+        for wizard in self:
+            dates = sorted({
+                date
+                for date in wizard.batch_id.payment_ids.mapped("date")
+                if date and date != today
+            })
+            if not dates:
+                wizard.date_note = False
+                continue
+            shown = format_date(self.env, dates[0])
+            if len(dates) > 1:
+                shown = "%s - %s" % (shown, format_date(self.env, dates[-1]))
+            wizard.date_note = self.env._(
+                "Not every payment in this batch is dated today (%(dates)s). "
+                "Wise sends the whole batch as soon as it is funded; the "
+                "accounting dates are not changed by that.",
+                dates=shown,
             )
 
     def action_confirm_funding(self):

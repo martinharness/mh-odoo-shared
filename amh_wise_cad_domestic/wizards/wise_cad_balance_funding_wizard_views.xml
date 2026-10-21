@@ -19,6 +19,9 @@
                     Odoo will first create and complete the Wise batch, then fund it
                     without redirecting you to the Wise website.
                 </div>
+                <div class="alert alert-info" role="alert" invisible="not date_note">
+                    <field name="date_note" nolabel="1"/>
+                </div>
 
                 <group>
                     <field name="batch_id"/>

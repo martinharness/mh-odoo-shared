@@ -1,6 +1,6 @@
 {
     "name": "AMH Wise CAD Domestic EFT",
-    "version": "19.0.1.10.0",
+    "version": "19.0.1.11.0",
     "category": "Accounting/Payment",
     "summary": "Pay Canadian vendors in CAD through Wise batch payments",
     "description": """
@@ -59,6 +59,19 @@ from the gap between what was billed and what was sent, because that gap is
 also what a part payment looks like. The columns print only when the table
 proves itself: amounts less discounts must equal the figure actually sent, in
 one currency, to the cent. Anything else falls back to the plain advice.
+
+Odoo's own Wise scheduling warning - "Wise will send the entire batch payment as
+soon as you fund it." - is dropped for these batches while every payment is
+dated today or earlier. It is per-payment and fires on any date that is not
+today, so a batch prepared on Monday and funded on Wednesday raised a second
+dialog headed "The batch cannot be validated" on a batch whose
+check_payments_for_errors returned nothing at all, answered by a button called
+"Proceed with validation" - read the way a new user reads it, that says the
+pay-run has failed. A payment dated in the FUTURE keeps the warning, because
+that is the case it is actually for: fund it now and Wise sends now while the
+books say next week. That the payments are not dated today is instead said once
+on the funding wizard, where the money is about to move. See
+models/account_batch_payment_warnings.py.
 
 Two things about balance funding that cost a live pay-run to find, both on
 3 Oct 2026, both in models/account_batch_payment_funding.py:

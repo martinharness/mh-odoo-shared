@@ -3,6 +3,7 @@ from . import account_batch_payment_address
 from . import account_batch_payment_funding
 from . import account_batch_payment_schedule
 from . import account_batch_payment_us_key
+from . import account_batch_payment_warnings
 from . import account_journal
 from . import account_payment
 from . import account_payment_method
