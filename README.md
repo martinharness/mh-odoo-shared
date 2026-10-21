@@ -97,6 +97,33 @@ ends on the Wise website:
 
 All of these work for USD *U.S. Direct Deposit* batches too.
 
+#### "The batch cannot be validated"
+
+Odoo warns before validating a Wise batch that *Wise will send the entire batch
+payment as soon as you fund it* / *Scheduled payments are not yet supported*,
+and the warning names every payment whose date is not today. It is per-payment:
+re-date one payment of a seventeen-payment batch to today and the warning comes
+back naming the other sixteen.
+
+On a batch prepared on Monday and funded on Wednesday that is true and
+uninteresting - the money leaves when the batch is funded, which the funding
+confirmation already says in bold. What it costs is a second dialog headed
+**The batch cannot be validated**, on a batch with no errors in it at all,
+answered by a button called *Proceed with validation*. Read the way a new user
+reads it, that says the pay-run has failed.
+
+So the warning is dropped while every payment in the batch is dated today or
+earlier. A payment dated in the **future** keeps it, because that is the case
+the warning is actually for: fund it now and Wise sends now while the books say
+next week. (*Fund from Wise Balance* refuses a future-dated batch outright;
+plain *Initiate Payment* does not, and there the warning is the only thing in
+the way.) That the payments are not dated today is instead said once, on the
+funding confirmation, where the money is about to move.
+
+It is matched on Odoo's own wording. If Odoo rewords it the match stops and the
+warning comes back - the safe direction to fail in, since the result is the
+dialog you have today rather than a silence nobody intended.
+
 #### The remittance advice
 
 Advice emails go to the vendor's `x_studio_eft_remittance_email` field if it
