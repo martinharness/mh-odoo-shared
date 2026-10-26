@@ -11,6 +11,13 @@ So the bill, which is the document that actually exists, becomes the source: one
 button on it builds the purchase order and the receipt behind it, links them to
 the bill, and leaves the bill in draft to be posted as before.
 
+The other direction is the commoner case. A bill usually arrives BEFORE the
+goods, auto-completing it from the order brings its lines in at quantity zero,
+and re-picking the order later does nothing because those lines already carry
+purchase_line_id. Reload PO Data fills them in once the warehouse has received,
+and amh_po_receipt_state says which bills are still waiting without opening any
+of them.
+
 WHY THIS IS SAFE HERE, AND WHAT WOULD CHANGE IF IT WERE NOT
 -----------------------------------------------------------
 Under PERIODIC valuation a receipt writes no journal entry at all: no
@@ -51,6 +58,27 @@ class AccountMove(models.Model):
              "are not linked to a purchase order line yet.",
     )
 
+    amh_po_receipt_state = fields.Selection(
+        selection=[
+            ("waiting", "Waiting on receipt"),
+            ("partial", "Partly received"),
+            ("ready", "Ready to bill"),
+        ],
+        string="Receipt",
+        compute="_compute_amh_po_receipt_state",
+        store=True,
+        help="On a draft vendor bill whose lines came from a purchase order: "
+             "whether what it bills has been received yet. Stored, so it is a "
+             "column and a filter on the Bills list, and it updates the moment "
+             "a receipt is validated.",
+    )
+    amh_can_reload_po = fields.Boolean(
+        string="Can Reload Purchase Order",
+        compute="_compute_amh_can_reload_po",
+        help="Set when a purchase order line behind this bill has quantities "
+             "received but not yet billed.",
+    )
+
     def _amh_backfill_lines(self):
         """The bill lines that want a purchase order line behind them.
 
@@ -83,6 +111,139 @@ class AccountMove(models.Model):
                 and move.state == "draft"
                 and move._amh_backfill_lines()
             )
+
+    def _amh_reload_lines(self):
+        """Bill lines whose purchase order line has something left to bill.
+
+        qty_to_invoice is received minus invoiced, and it already counts THIS
+        draft line, so a line sitting at 10 of 32 received reports 22 and lands
+        on 32 rather than 42. Only a positive figure is taken: a line billed
+        for more than was received reports a negative, and quietly reducing a
+        quantity somebody typed off the paper invoice is not this button's job.
+        """
+        self.ensure_one()
+        return self.invoice_line_ids.filtered(
+            lambda line: line.display_type == "product"
+            and line.purchase_line_id
+            and line.purchase_line_id.qty_to_invoice > 0
+        )
+
+    @api.depends(
+        "state",
+        "move_type",
+        "invoice_line_ids.quantity",
+        "invoice_line_ids.purchase_line_id",
+        "invoice_line_ids.purchase_line_id.qty_to_invoice",
+    )
+    def _compute_amh_can_reload_po(self):
+        for move in self:
+            move.amh_can_reload_po = bool(
+                move.move_type == "in_invoice"
+                and move.state == "draft"
+                and move._amh_reload_lines()
+            )
+
+    @api.depends(
+        "state",
+        "move_type",
+        "invoice_line_ids.quantity",
+        "invoice_line_ids.purchase_line_id",
+        "invoice_line_ids.purchase_line_id.qty_to_invoice",
+    )
+    def _compute_amh_po_receipt_state(self):
+        """Has what this bill bills actually arrived?
+
+        qty_to_invoice is STORED on purchase.order.line, so this recomputes by
+        itself the moment a receipt is validated - no cron, no polling, and
+        nothing is ever written to the bill to make the status appear.
+        """
+        for move in self:
+            move.amh_po_receipt_state = move._amh_po_receipt_state_value()
+
+    def _amh_po_receipt_state_value(self):
+        self.ensure_one()
+        if self.move_type != "in_invoice" or self.state != "draft":
+            return False
+        seen = set()
+        for line in self.invoice_line_ids:
+            if line.display_type != "product" or not line.purchase_line_id:
+                continue
+            if line.purchase_line_id.qty_to_invoice > 0:
+                seen.add("pullable")
+            elif line.quantity > 0:
+                # Already carries what was receivable - pulled, or keyed by hand.
+                seen.add("billed")
+            else:
+                seen.add("waiting")
+        if not seen:
+            # No purchase order behind it: a carrier, card-fee or repair bill,
+            # which has nothing to wait for and should not be flagged as if it
+            # had.
+            return False
+        if seen == {"waiting"}:
+            return "waiting"
+        if "waiting" in seen:
+            return "partial"
+        return "ready"
+
+    def action_amh_reload_po_quantities(self):
+        """Pull the receivable quantities off the purchase order.
+
+        Quantities only. The price stays as it is, because the price has to
+        agree with the paper invoice and the purchase order's is only what was
+        expected. Lines are never ADDED either: the bill's shape came off the
+        paper, and a line the vendor did not invoice has no business appearing
+        on it just because the order grew.
+        """
+        self.ensure_one()
+        if self.move_type != "in_invoice" or self.state != "draft":
+            raise UserError(self.env._(
+                "Only a draft vendor bill can be reloaded from its purchase "
+                "order."
+            ))
+        lines = self._amh_reload_lines()
+        if not lines:
+            raise UserError(self.env._(
+                "Nothing to pull in. Either the goods behind this bill have "
+                "not been received yet, or its lines already carry everything "
+                "that has been."
+            ))
+
+        # Snapshot BEFORE writing: writing a quantity recomputes qty_invoiced
+        # and therefore qty_to_invoice on the order line, so two bill lines
+        # sharing one order line would otherwise read a figure the first write
+        # had already moved.
+        wanted = {
+            line.id: line.quantity + line.purchase_line_id.qty_to_invoice
+            for line in lines
+        }
+        changes = []
+        for line in lines:
+            changes.append((line.product_id.display_name, line.quantity, wanted[line.id]))
+            line.quantity = wanted[line.id]
+
+        self.message_post(body=self.env._(
+            "Quantities pulled from %(order)s: %(changes)s. Prices are "
+            "untouched - check the total against the invoice before posting.",
+            order=", ".join(sorted(set(lines.purchase_line_id.order_id.mapped("name")))),
+            changes="; ".join(
+                "%s %s -> %s" % (name, before, after) for name, before, after in changes
+            ),
+        ))
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "type": "success",
+                "title": self.env._("Quantities reloaded"),
+                "message": self.env._(
+                    "%(count)s line(s) updated from the purchase order.",
+                    count=len(changes),
+                ),
+                "sticky": False,
+                "next": {"type": "ir.actions.client", "tag": "reload"},
+            },
+        }
 
     def _amh_backfill_datetime(self):
         """The bill's date as a datetime that reads as that date in any timezone.

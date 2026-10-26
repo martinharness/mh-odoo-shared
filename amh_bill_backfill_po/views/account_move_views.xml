@@ -8,11 +8,18 @@
             <!-- Appended to the sheet rather than anchored on a named field:
                  the only thing this view needs from core's form is that a
                  sheet exists, so an Odoo release that moves Source Document
-                 or renames a group cannot break the button. -->
+                 or renames a group cannot break the buttons. -->
             <xpath expr="//sheet" position="inside">
                 <field name="amh_can_backfill_po" invisible="1"/>
+                <field name="amh_can_reload_po" invisible="1"/>
             </xpath>
             <header position="inside">
+                <button name="action_amh_reload_po_quantities"
+                        type="object"
+                        string="Reload PO Data"
+                        class="btn-secondary"
+                        invisible="not amh_can_reload_po"
+                        help="Pull the quantities that have been received but not yet billed off this bill's purchase order. Quantities only - prices and lines are left alone, so check the total against the invoice before posting."/>
                 <button name="action_amh_backfill_po_and_receipt"
                         type="object"
                         string="Create PO &amp; Receipt"
@@ -20,6 +27,62 @@
                         invisible="not amh_can_backfill_po"
                         help="Create the purchase order and the receipt this bill should have had, receive the billed quantities and link them to the bill. The bill is left in draft."/>
             </header>
+        </field>
+    </record>
+
+    <!-- The whole point of storing amh_po_receipt_state: a column on the Bills
+         list, so a run through the drafts shows which ones the warehouse has
+         actually received without opening any of them. Appended with
+         position="inside" so no named column has to exist. -->
+    <record id="view_in_invoice_bill_tree_amh_receipt" model="ir.ui.view">
+        <field name="name">account.move.list.bill.amh.receipt</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_in_invoice_bill_tree"/>
+        <field name="arch" type="xml">
+            <list position="inside">
+                <field name="amh_po_receipt_state"
+                       widget="badge"
+                       optional="show"
+                       decoration-warning="amh_po_receipt_state == 'waiting'"
+                       decoration-info="amh_po_receipt_state == 'partial'"
+                       decoration-success="amh_po_receipt_state == 'ready'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_in_invoice_tree_amh_receipt" model="ir.ui.view">
+        <field name="name">account.move.list.in.amh.receipt</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_in_invoice_tree"/>
+        <field name="arch" type="xml">
+            <list position="inside">
+                <field name="amh_po_receipt_state"
+                       widget="badge"
+                       optional="show"
+                       decoration-warning="amh_po_receipt_state == 'waiting'"
+                       decoration-info="amh_po_receipt_state == 'partial'"
+                       decoration-success="amh_po_receipt_state == 'ready'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_account_bill_filter_amh_receipt" model="ir.ui.view">
+        <field name="name">account.move.search.bill.amh.receipt</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_account_bill_filter"/>
+        <field name="arch" type="xml">
+            <search position="inside">
+                <separator/>
+                <filter name="amh_receipt_ready"
+                        string="Ready to Bill"
+                        domain="[('amh_po_receipt_state', '=', 'ready')]"/>
+                <filter name="amh_receipt_partial"
+                        string="Partly Received"
+                        domain="[('amh_po_receipt_state', '=', 'partial')]"/>
+                <filter name="amh_receipt_waiting"
+                        string="Waiting on Receipt"
+                        domain="[('amh_po_receipt_state', '=', 'waiting')]"/>
+            </search>
         </field>
     </record>
 </odoo>

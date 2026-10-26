@@ -1,8 +1,8 @@
 {
     "name": "AMH Backfill PO & Receipt from Bill",
-    "version": "19.0.1.1.0",
+    "version": "19.0.1.2.0",
     "category": "Accounting/Accounting",
-    "summary": "Create the purchase order and receipt a vendor bill should have had",
+    "summary": "Keep a vendor bill and its purchase order in step, from the bill",
     "description": """
 A counter purchase arrives as paper: eighteen vise grips from the hardware
 store, an invoice, and no purchase order in Odoo. The bill is read off the PDF
@@ -39,6 +39,25 @@ reported in the bill's chatter rather than used to refuse the button. The goods
 may well have been ordered on an order somebody else raised, and the honest
 answer to that is to say so where it will be seen, not to block the button and
 leave a dialog whose only choice is Close.
+
+THE OTHER DIRECTION: RELOADING A BILL FROM ITS ORDER
+
+A bill often arrives before the goods do. Auto-completing it from the purchase
+order then brings its lines in at quantity ZERO, because nothing has been
+received and there is nothing yet to invoice - and re-picking the order later
+does not help, since those lines already carry purchase_line_id and Odoo adds
+only order lines a bill does not have. "Reload PO Data" fills them in once the
+warehouse has received: for every line whose order line has quantities received
+but not billed, the quantity becomes what is receivable. Prices are untouched,
+because the price has to agree with the paper, and no line is ever added,
+because the bill's shape came off the paper too.
+
+Which bills are waiting on the warehouse is answered without opening any of
+them. The stored field amh_po_receipt_state reads Waiting on receipt, Partly
+received or Ready to bill, and appears as a column and three filters on the
+Bills list. It depends on the order line's qty_to_invoice, which is itself
+stored, so it updates the instant a receipt is validated - no cron, and nothing
+is written to a draft bill to make the status appear.
 
 PERIODIC VALUATION ONLY, AND IT CHECKS
 
