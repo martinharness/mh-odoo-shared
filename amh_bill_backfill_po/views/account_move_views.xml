@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_move_form_amh_backfill_po" model="ir.ui.view">
+        <field name="name">account.move.form.amh.backfill.po</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <!-- Appended to the sheet rather than anchored on a named field:
+                 the only thing this view needs from core's form is that a
+                 sheet exists, so an Odoo release that moves Source Document
+                 or renames a group cannot break the button. -->
+            <xpath expr="//sheet" position="inside">
+                <field name="amh_can_backfill_po" invisible="1"/>
+            </xpath>
+            <header position="inside">
+                <button name="action_amh_backfill_po_and_receipt"
+                        type="object"
+                        string="Create PO &amp; Receipt"
+                        class="btn-secondary"
+                        invisible="not amh_can_backfill_po"
+                        help="Create the purchase order and the receipt this bill should have had, receive the billed quantities and link them to the bill. The bill is left in draft."/>
+            </header>
+        </field>
+    </record>
+</odoo>
