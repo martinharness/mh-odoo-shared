@@ -6,6 +6,7 @@ Odoo.sh project. Each top-level folder is one installable module.
 | Module | Display name | Depends on |
 | --- | --- | --- |
 | `amh_bom_copy` | AMH Item & BoM Copy | `mrp`, `sale` |
+| `amh_bill_backfill_po` | AMH Backfill PO & Receipt from Bill | `purchase_stock` |
 | `amh_customer_receipts` | Customer Receipts | `account` |
 | `amh_vendor_bill_import` | AMH Vendor Bill Import | `purchase_stock`, `account` |
 | `amh_wise_cad_domestic` | AMH Wise CAD Domestic EFT | `l10n_us_direct_deposit`, `l10n_ca_payment_cpa005` (Enterprise) |
@@ -62,6 +63,57 @@ Needs *Documents* (Enterprise) for the folder intake and
 are detected at run time and it works without them. **Change the account codes
 in the system parameters to match your chart of accounts, and keep both crons
 disabled, until the parked/posted split looks right on a real batch.**
+
+### AMH Backfill PO & Receipt from Bill
+**Periodic stock valuation only — it checks, and refuses otherwise.**
+
+A counter purchase arrives as paper: eighteen vise grips from the hardware store,
+an invoice, and no purchase order in Odoo. The bill is read off the PDF and lands
+in Draft, and only at posting time does it become clear the stock has to come in
+first - which means leaving the bill for the Purchase app, raising an RFQ,
+confirming it, finding the receipt in Inventory, validating it, and coming back.
+Re-uploading the PDF would only make a second draft.
+
+So the bill becomes the source. *Create PO & Receipt* in the vendor bill's header
+builds the purchase order from the bill's own lines, confirms it, receives the
+billed quantities, backdates the receipt to the bill date, links each bill line
+to its order line, and leaves the bill in draft to post exactly as before.
+
+Only **storable** lines not already linked to a purchase order are taken. A
+service, or a productless line the OCR coded straight to an expense account, has
+nothing to receive and is left off - a receipt line that cannot be received is
+worse than none. So the button hides itself on the carrier, card-fee and repair
+invoices that make up most of the bills arriving without a purchase order.
+
+The order is built *from* the bill, so its price is the bill's price by
+construction and there is never a variance to explain. The price is written back
+after `create()` and then checked, because `purchase.order.line.price_unit` is
+computed-stored-with-precompute and the vendor price list can otherwise win; the
+check is at the **Product Price** decimal precision rather than the currency's,
+because small hardware is bought at prices like 0.0855 a piece and rounding that
+to cents would call two different prices the same. A repriced order is refused
+before it is confirmed, so nothing is received.
+
+Bill lines are paired to order lines by **creation order, not by product** - a
+counter invoice can carry the same product twice at two prices.
+
+An existing confirmed order for the same vendor with quantities still to bill is
+reported in the bill's chatter rather than used to refuse the button: the goods
+may well have been ordered on an order somebody else raised, and the honest
+answer is to say so where it will be seen.
+
+#### The valuation constraint, worth checking before you install it
+
+Under **periodic** (manual) valuation a receipt writes no journal entry at all,
+so the bill's own coding is the entire accounting story and this button changes
+nothing in the ledger. Under **perpetual** (automated / real-time) valuation it
+would: the receipt posts against a stock-interim account that only a PO-linked
+bill line clears, writing the link here does not recode that line, and
+backdating an already-validated move leaves its journal entry dated today - so
+the interim account would hang with nothing saying so. Rather than guess, the
+button **refuses** when any product category on the bill is set to Automated
+valuation, and names them. Check *Inventory > Configuration > Product
+Categories* before relying on it.
 
 ### AMH Wise CAD Domestic EFT
 Requires the company to be connected to Wise in *Accounting > Settings* (the
