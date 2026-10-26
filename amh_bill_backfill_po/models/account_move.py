@@ -465,6 +465,32 @@ class AccountMove(models.Model):
 
     def action_amh_backfill_po_and_receipt(self):
         self.ensure_one()
+
+        # Drop the form's default_* keys before creating anything.
+        #
+        # Odoo applies a default_<field> context key to ANY model that has a
+        # field of that name, and the Bills action carries
+        # default_move_type="in_invoice". account.move.move_type is the kind of
+        # document; stock.picking.move_type is the Shipping Policy, "direct" or
+        # "one". So confirming the order built a receipt and Odoo tried to put
+        # "in_invoice" in its Shipping Policy:
+        #
+        #   ValueError: Wrong value for stock.picking.move_type: 'in_invoice'
+        #
+        # Everything below is built explicitly from the bill, so the form's
+        # defaults have nothing legitimate to contribute to any of it. Written
+        # out rather than using odoo.tools.clean_context so that a move of that
+        # helper between releases cannot stop the module importing.
+        #
+        # Worth remembering: this never showed up in testing because the tests
+        # called the method over RPC, where no form context exists. A button
+        # has to be exercised with the context the UI actually supplies.
+        self = self.with_context({
+            key: value
+            for key, value in self.env.context.items()
+            if not key.startswith("default_")
+        })
+
         if self.move_type != "in_invoice" or self.state != "draft":
             raise UserError(self.env._(
                 "Only a draft vendor bill can have a purchase order "

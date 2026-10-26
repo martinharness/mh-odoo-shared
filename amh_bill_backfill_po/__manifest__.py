@@ -1,6 +1,6 @@
 {
     "name": "AMH Backfill PO & Receipt from Bill",
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.2.1",
     "category": "Accounting/Accounting",
     "summary": "Keep a vendor bill and its purchase order in step, from the bill",
     "description": """
@@ -33,6 +33,12 @@ precision - four decimals, because small hardware is bought at prices like
 0.0855 a piece and rounding that to cents would call two different prices the
 same. A repriced order is refused before it is confirmed, so nothing is
 received.
+
+The action also strips every default_* key from the context before it builds
+anything. Odoo applies a default_<field> key to ANY model with a field of that
+name, and the Bills action carries default_move_type="in_invoice" - which Odoo
+duly tried to write into stock.picking.move_type, the Shipping Policy, the
+first time the button was pressed from the form.
 
 An existing confirmed order for the same vendor with quantities still to bill is
 reported in the bill's chatter rather than used to refuse the button. The goods
