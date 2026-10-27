@@ -102,6 +102,48 @@ reported in the bill's chatter rather than used to refuse the button: the goods
 may well have been ordered on an order somebody else raised, and the honest
 answer is to say so where it will be seen.
 
+#### Reload PO Data
+
+The commoner case is the bill that arrives *before* the goods. Auto-completing
+it from the purchase order brings its lines in at quantity **zero**, because
+nothing has been received and there is nothing yet to invoice - and re-picking
+the order later does not help, since those lines already carry
+`purchase_line_id` and Odoo adds only order lines a bill does not have.
+
+*Reload PO Data* fills them in once the warehouse has received: for each line
+whose order line has quantities received but not billed, the quantity becomes
+`quantity + qty_to_invoice`. That already nets off what the draft claims, so a
+line at 10 of 32 lands on 32 rather than 42, and only a positive figure is
+taken - a line billed for more than was received is left alone rather than
+quietly reduced. Prices are untouched and no line is ever added: both came off
+the paper invoice.
+
+#### Which bills are waiting
+
+`amh_po_receipt_state` is a stored field reading **Waiting on receipt**,
+**Partly received** or **Ready to bill**, shown as a badge column on the Bills
+list with three matching filters, and left blank on bills with no purchase
+order behind them. It depends on the order line's `qty_to_invoice`, which is
+itself stored, so it updates the moment a receipt is validated - no cron, and
+nothing is written to a draft bill to make the status appear.
+
+The column comes from a single view record on `account.view_in_invoice_tree`.
+`account.view_in_invoice_bill_tree` is a primary view that *inherits* it, so
+extending both puts the column on the Bills list twice.
+
+#### One trap worth knowing
+
+The order line, and therefore the receipt, is built in the **bill's** unit, and
+Odoo converts that into the product's own unit when the goods are received.
+Where the two units are not sensibly related the conversion is wrong and
+silent: a bill for five sheets of poly in "Each", against a product stocked in
+"4x8 FT", received 1.68 of them. Odoo 18 and earlier refused to let a product's
+purchase unit sit in a different UoM category from its stock unit; Odoo 19
+replaced categories with the relative-unit tree and the check went with them.
+Worth adding a constraint of your own that a vendor's unit must be the
+product's own unit or one of its packagings - at AMH that lives in a separate
+module which is not included in this repository.
+
 #### The valuation constraint, worth checking before you install it
 
 Under **periodic** (manual) valuation a receipt writes no journal entry at all,
