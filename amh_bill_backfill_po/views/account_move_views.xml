@@ -32,24 +32,13 @@
 
     <!-- The whole point of storing amh_po_receipt_state: a column on the Bills
          list, so a run through the drafts shows which ones the warehouse has
-         actually received without opening any of them. Appended with
-         position="inside" so no named column has to exist. -->
-    <record id="view_in_invoice_bill_tree_amh_receipt" model="ir.ui.view">
-        <field name="name">account.move.list.bill.amh.receipt</field>
-        <field name="model">account.move</field>
-        <field name="inherit_id" ref="account.view_in_invoice_bill_tree"/>
-        <field name="arch" type="xml">
-            <list position="inside">
-                <field name="amh_po_receipt_state"
-                       widget="badge"
-                       optional="show"
-                       decoration-warning="amh_po_receipt_state == 'waiting'"
-                       decoration-info="amh_po_receipt_state == 'partial'"
-                       decoration-success="amh_po_receipt_state == 'ready'"/>
-            </list>
-        </field>
-    </record>
+         actually received without opening any of them.
 
+         ONE record, on view_in_invoice_tree. account.view_in_invoice_bill_tree
+         is a primary view that INHERITS view_in_invoice_tree, so extending the
+         parent already reaches the Bills list; extending both put the column on
+         it twice. Appended with position="inside" so no named column has to
+         exist for the xpath to land. -->
     <record id="view_in_invoice_tree_amh_receipt" model="ir.ui.view">
         <field name="name">account.move.list.in.amh.receipt</field>
         <field name="model">account.move</field>

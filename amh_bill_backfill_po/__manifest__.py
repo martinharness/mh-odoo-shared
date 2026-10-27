@@ -1,6 +1,6 @@
 {
     "name": "AMH Backfill PO & Receipt from Bill",
-    "version": "19.0.1.2.1",
+    "version": "19.0.1.2.2",
     "category": "Accounting/Accounting",
     "summary": "Keep a vendor bill and its purchase order in step, from the bill",
     "description": """
@@ -63,7 +63,9 @@ them. The stored field amh_po_receipt_state reads Waiting on receipt, Partly
 received or Ready to bill, and appears as a column and three filters on the
 Bills list. It depends on the order line's qty_to_invoice, which is itself
 stored, so it updates the instant a receipt is validated - no cron, and nothing
-is written to a draft bill to make the status appear.
+is written to a draft bill to make the status appear. The column is added by a
+SINGLE view record, on account.view_in_invoice_tree: the Bills list view is a
+primary view that inherits it, so extending both put the column on twice.
 
 PERIODIC VALUATION ONLY, AND IT CHECKS
 
@@ -86,6 +88,12 @@ the interim account and dating the stock valuation layer as well.
 It does build the documents in the order perpetual valuation would require
 anyway - order, then receipt, then the bill posted by hand - so the sequence is
 right even where the accounting is not yet handled.
+
+UNITS: this module copies the bill line's unit onto the order line, so a bill
+line in a unit the product is not sold in is converted silently when the
+receipt is validated - five sheets of poly once became 1.68. That is guarded at
+the source by amh_variant_fields, which requires a vendor's unit to be one the
+product is actually sold in.
     """,
     "author": "Aaron Martin Harness Ltd",
     "license": "LGPL-3",
