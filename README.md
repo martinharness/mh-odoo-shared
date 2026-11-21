@@ -10,6 +10,11 @@ Odoo.sh project. Each top-level folder is one installable module.
 | `amh_customer_receipts` | Customer Receipts | `account` |
 | `amh_vendor_bill_import` | AMH Vendor Bill Import | `purchase_stock`, `account` |
 | `amh_wise_cad_domestic` | AMH Wise CAD Domestic EFT | `l10n_us_direct_deposit`, `l10n_ca_payment_cpa005` (Enterprise) |
+| `amh_iot_printer_reset` | IoT Printer Reset | `base`, `web` |
+
+Also here, **not an Odoo module**: `iot_windows_dymo_fix/`, a PowerShell patch
+for Windows IoT PCs whose DYMO labels print half size or sideways (see its
+`README.md`). Odoo.sh ignores the folder because it has no manifest.
 
 ## Installing on Odoo.sh
 
@@ -273,3 +278,19 @@ Each of these cost a live pay-run to find:
 
 ## License
 LGPL-3
+
+### IoT Printer Reset
+Undoes "don't ask again" on Odoo IoT printing. Odoo IoT keeps each report's
+chosen printer in the browser, not the database, so normally the only way back
+to the printer dialog is clearing site data. This adds *Reset Printer Choices*
+to the user menu (all reports, this computer) and a *Reset my printer* button
+on each report's form (one report, this computer). Works with or without the
+`iot` app installed. See the module's `README.md`.
+
+### DYMO fix for the Windows IoT (`iot_windows_dymo_fix/`)
+Not a module. A script plus scheduled task that patches the Windows IoT's
+printer driver so printers named "DYMO" print on the label paper in landscape
+instead of duplex, re-applied automatically after the IoT's weekly self-update.
+It also covers running the `odoo-iot` service as the PC's user instead of Local
+System, which was the other half of the fix. Only needed if your DYMOs print
+wrong through IoT. See its `README.md`.
